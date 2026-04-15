@@ -1,51 +1,71 @@
 import streamlit as st
 import pandas as pd
+import time
 
-# 1. CONFIGURAÇÃO DO PAINEL
-st.set_page_config(page_title="SIG-ILTB Nova Iguaçu", layout="wide", page_icon="📊")
+# 1. CONFIGURAÇÃO DA PÁGINA
+st.set_page_config(page_title="Dashboard SIG-ILTB", layout="wide")
+st.title("📊 Painel de Monitorização SIG-ILTB - Nova Iguaçu")
 
-# 2. LIGAÇÃO À PLANILHA (IDs verificados)
-SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
-URL_PACIENTES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes"
-URL_EVOLUCOES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes"
-
-st.title("📊 Painel de Monitoramento SIG-ILTB")
-st.subheader("Vigilância Epidemiológica - Nova Iguaçu")
-
-# 3. BOTÃO DE ATUALIZAÇÃO NA BARRA LATERAL
+# 2. BOTÃO DE SINCRONIZAÇÃO FORÇADA
+# Este botão limpa a memória do site e força a leitura de novos dados da planilha
 if st.sidebar.button('🔄 ATUALIZAR DADOS AGORA'):
     st.cache_data.clear()
     st.rerun()
 
-# 4. FUNÇÃO PARA LER OS DADOS
-@st.cache_data(ttl=60)
+# 3. LIGAÇÃO DIRETA À PLANILHA GOOGLE
+# Usamos um "timestamp" (carimbo de tempo) para forçar o Google a enviar a versão mais recente
+SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
+timestamp = int(time.time())
+
+URL_PACIENTES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes&t={timestamp}"
+URL_EVOLUCOES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes&t={timestamp}"
+
+# Função para carregar os dados de forma segura
+@st.cache_data(ttl=60) # Guarda os dados por 60 segundos
 def carregar_dados():
     try:
-        p = pd.read_csv(URL_PACIENTES)
-        e = pd.read_csv(URL_EVOLUCOES)
-        return p, e
-    except:
+        df_pacientes = pd.read_csv(URL_PACIENTES)
+        df_evolucoes = pd.read_csv(URL_EVOLUCOES)
+        return df_pacientes, df_evolucoes
+    except Exception as e:
         return None, None
 
-df_p, df_e = carregar_dados()
+df_pacientes, df_evolucoes = carregar_dados()
 
-if df_p is not None:
-    # Métricas
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total de Pacientes", len(df_p))
-    # Verifica a coluna de situação
-    sit_col = 'Situação Atual' if 'Situação Atual' in df_p.columns else df_p.columns[-1]
-    c2.metric("Tratamentos Ativos", len(df_p[df_p[sit_col] == 'Em andamento']))
-    c3.metric("Interrupções (Busca Ativa)", len(df_p[df_p[sit_col] == 'Interrupção do tratamento']))
+# 4. CONSTRUÇÃO DO PAINEL VISUAL
+if df_pacientes is not None and not df_pacientes.empty:
+    
+    # --- MÉTRICAS PRINCIPAIS ---
+    st.markdown("### Resumo Geral")
+    col1, col2, col3 = st.columns(3)
+    
+    total_pacientes = len(df_pacientes)
+    
+    # A procurar na Coluna de Situação Atual (ajuste o nome se estiver diferente na linha 1 da sua planilha)
+    nome_coluna_situacao = df_pacientes.columns[23] if len(df_pacientes.columns) >= 24 else df_pacientes.columns[-1]
+    
+    ativos = len(df_pacientes[df_pacientes[nome_coluna_situacao].astype(str).str.contains('Em andamento', na=False, case=False)])
+    interrompidos = len(df_pacientes[df_pacientes[nome_coluna_situacao].astype(str).str.contains('Interrupção', na=False, case=False)])
+    
+    col1.metric("Total de Cadastros", total_pacientes)
+    col2.metric("Tratamentos Ativos", ativos)
+    col3.metric("Busca Ativa (Interrupções)", interrompidos)
+    
+    st.divider()
 
-    # Tabelas
-    t1, t2 = st.tabs(["📋 Lista de Pacientes", "📈 Evoluções Clínicas"])
-    with t1:
-        st.dataframe(df_p, use_container_width=True)
-    with t2:
-        if df_e is not None:
-            st.dataframe(df_e, use_container_width=True)
+    # --- TABELAS DE DADOS ---
+    tab1, tab2 = st.tabs(["📋 Fichas de Pacientes", "📈 Histórico de Evoluções"])
+    
+    with tab1:
+        st.subheader("Base de Dados: Pacientes")
+        st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
+        
+    with tab2:
+        st.subheader("Base de Dados: Evoluções")
+        if df_evolucoes is not None and not df_evolucoes.empty:
+            st.dataframe(df_evolucoes, use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhuma evolução registrada ainda.")
+            st.info("Nenhuma evolução foi registada na planilha ou os dados ainda estão a ser processados.")
+            
 else:
-    st.info("Conectando à Planilha Central...")
+    st.error("⚠️ Não foi possível carregar os dados. Verifique se a sua Planilha do Google está com o acesso definido como 'Qualquer pessoa com a ligação'.")
