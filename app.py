@@ -6,26 +6,24 @@ import time
 st.set_page_config(page_title="Dashboard SIG-ILTB", layout="wide")
 st.title("📊 Painel de Monitorização SIG-ILTB - Nova Iguaçu")
 
+SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
+
 # 2. BOTÃO DE SINCRONIZAÇÃO FORÇADA
-# Este botão limpa a memória do site e força a leitura de novos dados da planilha
 if st.sidebar.button('🔄 ATUALIZAR DADOS AGORA'):
     st.cache_data.clear()
     st.rerun()
 
-# 3. LIGAÇÃO DIRETA À PLANILHA GOOGLE
-# Usamos um "timestamp" (carimbo de tempo) para forçar o Google a enviar a versão mais recente
-SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
-timestamp = int(time.time())
-
-URL_PACIENTES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes&t={timestamp}"
-URL_EVOLUCOES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes&t={timestamp}"
-
-# Função para carregar os dados de forma segura
-@st.cache_data(ttl=60) # Guarda os dados por 60 segundos
+# 3. FUNÇÃO BLINDADA CONTRA O CACHE DO GOOGLE
+@st.cache_data(ttl=10) # Guarda no máximo por 10 segundos
 def carregar_dados():
     try:
-        df_pacientes = pd.read_csv(URL_PACIENTES)
-        df_evolucoes = pd.read_csv(URL_EVOLUCOES)
+        # Colocamos o time.time() AQUI DENTRO para gerar um link novo a cada clique
+        agora = int(time.time())
+        url_p = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes&nocache={agora}"
+        url_e = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes&nocache={agora}"
+        
+        df_pacientes = pd.read_csv(url_p)
+        df_evolucoes = pd.read_csv(url_e)
         return df_pacientes, df_evolucoes
     except Exception as e:
         return None, None
@@ -35,13 +33,10 @@ df_pacientes, df_evolucoes = carregar_dados()
 # 4. CONSTRUÇÃO DO PAINEL VISUAL
 if df_pacientes is not None and not df_pacientes.empty:
     
-    # --- MÉTRICAS PRINCIPAIS ---
     st.markdown("### Resumo Geral")
     col1, col2, col3 = st.columns(3)
     
     total_pacientes = len(df_pacientes)
-    
-    # A procurar na Coluna de Situação Atual (ajuste o nome se estiver diferente na linha 1 da sua planilha)
     nome_coluna_situacao = df_pacientes.columns[23] if len(df_pacientes.columns) >= 24 else df_pacientes.columns[-1]
     
     ativos = len(df_pacientes[df_pacientes[nome_coluna_situacao].astype(str).str.contains('Em andamento', na=False, case=False)])
@@ -53,7 +48,6 @@ if df_pacientes is not None and not df_pacientes.empty:
     
     st.divider()
 
-    # --- TABELAS DE DADOS ---
     tab1, tab2 = st.tabs(["📋 Fichas de Pacientes", "📈 Histórico de Evoluções"])
     
     with tab1:
@@ -68,4 +62,4 @@ if df_pacientes is not None and not df_pacientes.empty:
             st.info("Nenhuma evolução foi registada na planilha ou os dados ainda estão a ser processados.")
             
 else:
-    st.error("⚠️ Não foi possível carregar os dados. Verifique se a sua Planilha do Google está com o acesso definido como 'Qualquer pessoa com a ligação'.")
+    st.error("⚠️ Não foi possível carregar os dados. Verifique o link e o compartilhamento da planilha.")
