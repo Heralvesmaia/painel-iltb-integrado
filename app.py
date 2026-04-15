@@ -1,47 +1,71 @@
 import streamlit as st
 import pandas as pd
 
-# Configuração visual do Painel
-st.set_page_config(page_title="Monitor SIG-ILTB Nova Iguaçu", layout="wide")
+# 1. CONFIGURAÇÃO DA PÁGINA
+st.set_page_config(page_title="SIG-ILTB Nova Iguaçu", layout="wide", page_icon="📊")
 
-# Link direto para exportação CSV das abas da sua planilha
+# 2. ENDEREÇOS DA PLANILHA (IDs que você forneceu)
 SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
 URL_PACIENTES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes"
 URL_EVOLUCOES = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes"
 
+# Título e Estilo
 st.title("📊 Painel de Monitoramento SIG-ILTB")
-st.subheader("Vigilância Longitudinal de Nova Iguaçu")
+st.markdown("### Vigilância Epidemiológica - Nova Iguaçu")
 
-# Função para carregar os dados em tempo real
-@st.cache_data(ttl=60) 
+# 3. FUNÇÃO PARA CARREGAR DADOS COM BOTÃO DE ATUALIZAÇÃO FORÇADA
 def carregar_dados():
     try:
-        p = pd.read_csv(URL_PACIENTES)
-        e = pd.read_csv(URL_EVOLUCOES)
-        return p, e
+        # Lendo abas
+        df_p = pd.read_csv(URL_PACIENTES)
+        df_e = pd.read_csv(URL_EVOLUCOES)
+        return df_p, df_e
     except Exception as e:
+        st.error(f"Erro ao conectar com a planilha: {e}")
         return None, None
+
+# Botão para limpar o cache e ver dados novos na hora
+if st.sidebar.button('🔄 Atualizar Dados Agora'):
+    st.cache_data.clear()
+    st.rerun()
 
 df_p, df_e = carregar_dados()
 
 if df_p is not None:
-    # Métricas no topo do Painel
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total de Pacientes", len(df_p))
+    # 4. TRATAMENTO DE COLUNAS (Remover espaços e garantir nomes)
+    df_p.columns = [c.strip() for c in df_p.columns]
     
-    # Filtro de situação
-    situacao_col = 'Situação Atual' if 'Situação Atual' in df_p.columns else df_p.columns[-1]
-    col2.metric("Tratamentos Ativos", len(df_p[df_p[situacao_col] == 'Em andamento']))
-    col3.metric("Total de Consultas", len(df_e))
+    # 5. MÉTRICAS NO TOPO
+    c1, c2, c3 = st.columns(3)
+    total_pacientes = len(df_p)
+    ativos = len(df_p[df_p['Situação Atual'] == 'Em andamento'])
+    interrompidos = len(df_p[df_p['Situação Atual'] == 'Interrupção do tratamento'])
+    
+    c1.metric("Total Notificado", total_pacientes)
+    c2.metric("Em Tratamento", ativos)
+    c3.metric("Interrupções (Busca Ativa)", interrompidos, delta_color="inverse")
 
-    # Abas de visualização
-    tab_geral, tab_consultas = st.tabs(["📋 Lista de Pacientes", "📈 Histórico de Evoluções"])
+    # 6. FILTROS LATERAIS
+    st.sidebar.divider()
+    st.sidebar.header("Filtros")
+    unidades = df_p['Unidade de Tratamento'].unique()
+    sel_unid = st.sidebar.multiselect("Filtrar por Unidade", unidades)
+    
+    if sel_unid:
+        df_p = df_p[df_p['Unidade de Tratamento'].isin(sel_unid)]
 
-    with tab_geral:
+    # 7. ABAS DE VISUALIZAÇÃO
+    tab1, tab2 = st.tabs(["📋 Lista de Pacientes", "📈 Histórico de Evoluções"])
+    
+    with tab1:
+        st.write(f"Exibindo {len(df_p)} registros")
         st.dataframe(df_p, use_container_width=True)
-
-    with tab_consultas:
-        st.write("Histórico das últimas evoluções registradas:")
-        st.dataframe(df_e, use_container_width=True)
+        
+    with tab2:
+        if df_e is not None and not df_e.empty:
+            st.write("Evoluções registradas no Prontuário")
+            st.dataframe(df_e, use_container_width=True)
+        else:
+            st.info("Nenhuma evolução clínica registrada ainda.")
 else:
-    st.info("Aguardando os primeiros dados serem inseridos no formulário para gerar o monitoramento.")
+    st.warning("Verifique se a planilha está compartilhada como 'Qualquer pessoa com o link pode ler'.")
