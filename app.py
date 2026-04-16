@@ -2,59 +2,82 @@ import streamlit as st
 import pandas as pd
 import time
 
-st.set_page_config(page_title="Dashboard SIG-ILTB", layout="wide")
-st.title("📊 Painel de Monitorização SIG-ILTB - Nova Iguaçu")
+# 1. CONFIGURAÇÃO DA PÁGINA
+st.set_page_config(page_title="Dashboard SIG-ILTB", layout="wide", page_icon="📊")
 
+# Estilo para remover o menu padrão do Streamlit e deixar mais limpo
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_base_with_whitespace=True)
+
+st.title("📊 Painel de Monitorização SIG-ILTB")
+st.subheader("Vigilância Ativa - Nova Iguaçu")
+
+# ID DA PLANILHA (O seu ID oficial)
 SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
 
-if st.sidebar.button('🔄 ATUALIZAR DADOS AGORA'):
-    st.cache_data.clear()
-    st.rerun()
+# 2. BARRA LATERAL (CONTROLOS)
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/1085/1085810.png", width=100)
+    st.markdown("### Controlos de Dados")
+    if st.button('🔄 ATUALIZAR PAINEL AGORA'):
+        st.cache_data.clear()
+        st.rerun()
+    st.divider()
+    st.caption("Sistema de Monitorização V1.0")
 
-st.info("⏳ Passo 1: O site acordou e está a preparar-se para ler o Google...")
-
-@st.cache_data(ttl=10)
-def carregar_dados():
+# 3. FUNÇÃO DE CARREGAMENTO (BLINDADA)
+@st.cache_data(ttl=15)
+def carregar_dados_oficiais():
     try:
         agora = int(time.time())
         url_p = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes&nocache={agora}"
         url_e = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes&nocache={agora}"
         
-        # O parâmetro on_bad_lines impede que o site trave se o Google mandar uma página de erro
-        df_pacientes = pd.read_csv(url_p, on_bad_lines='skip')
-        df_evolucoes = pd.read_csv(url_e, on_bad_lines='skip')
-        
-        return df_pacientes, df_evolucoes
-    except Exception as e:
-        return str(e), None
+        df_p = pd.read_csv(url_p, on_bad_lines='skip')
+        df_e = pd.read_csv(url_e, on_bad_lines='skip')
+        return df_p, df_e
+    except:
+        return None, None
 
-st.warning("⏳ Passo 2: A bater na porta do Google Drive...")
-df_pacientes, df_evolucoes = carregar_dados()
+df_pacientes, df_evolucoes = carregar_dados_oficiais()
 
-# Teste de Erro Visual
-if isinstance(df_pacientes, str):
-    st.error(f"🚨 O Google bloqueou a entrada! Erro: {df_pacientes}")
-elif df_pacientes is not None and not df_pacientes.empty:
-    st.success("✅ Passo 3: SUCESSO! A porta abriu e os dados entraram.")
+# 4. EXIBIÇÃO DO PAINEL
+if df_pacientes is not None and not df_pacientes.empty:
     
-    # --- O PAINEL VOLTA AO NORMAL AQUI ---
-    st.markdown("### Resumo Geral")
+    # --- MÉTRICAS ---
     col1, col2, col3 = st.columns(3)
-    total_pacientes = len(df_pacientes)
-    nome_coluna_situacao = df_pacientes.columns[23] if len(df_pacientes.columns) >= 24 else df_pacientes.columns[-1]
     
-    ativos = len(df_pacientes[df_pacientes[nome_coluna_situacao].astype(str).str.contains('Em andamento', na=False, case=False)])
-    interrompidos = len(df_pacientes[df_pacientes[nome_coluna_situacao].astype(str).str.contains('Interrupção', na=False, case=False)])
-    
-    col1.metric("Total de Cadastros", total_pacientes)
+    total = len(df_pacientes)
+    # Tenta identificar a coluna de situação (ajuste o índice se necessário)
+    try:
+        col_sit = df_pacientes.columns[23] 
+        ativos = len(df_pacientes[df_pacientes[col_sit].astype(str).str.contains('Em andamento', na=False, case=False)])
+        interrupcoes = len(df_pacientes[df_pacientes[col_sit].astype(str).str.contains('Interrupção', na=False, case=False)])
+    except:
+        ativos = total
+        interrupcoes = 0
+
+    col1.metric("Total de Cadastros", total)
     col2.metric("Tratamentos Ativos", ativos)
-    col3.metric("Busca Ativa (Interrupções)", interrompidos)
+    col3.metric("Busca Ativa (Interrupções)", interrupcoes)
+    
     st.divider()
 
-    tab1, tab2 = st.tabs(["📋 Fichas", "📈 Evoluções"])
+    # --- TABELAS ---
+    tab1, tab2 = st.tabs(["📋 Lista de Pacientes", "📈 Histórico de Evoluções"])
+    
     with tab1:
         st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
+        
     with tab2:
-        st.dataframe(df_evolucoes, use_container_width=True, hide_index=True)
+        if df_evolucoes is not None and not df_evolucoes.empty:
+            st.dataframe(df_evolucoes, use_container_width=True, hide_index=True)
+        else:
+            st.info("Aguardando os primeiros registos de evolução...")
+            
 else:
-    st.error("⚠️ A planilha abriu, mas o site achou que ela estava vazia. Verifique o nome da aba 'Pacientes'.")
+    st.error("⚠️ Erro ao carregar dados. Verifique a ligação à internet ou se a Planilha está aberta para 'Qualquer pessoa com o link'.")
