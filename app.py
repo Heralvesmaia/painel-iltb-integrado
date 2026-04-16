@@ -109,18 +109,10 @@ def tela_login():
 # 4. PAINEL PRINCIPAL
 if tela_login():
     
+    # CSS básico apenas para cores de fundo
     st.markdown("""
         <style>
         .main { background-color: #f4f6f9; }
-        .prontuario-header { background-color: white; padding: 25px; border-radius: 12px; border-left: 6px solid #0056b3; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;}
-        .prontuario-title { margin-top: 0; color: #0056b3; font-size: 1.8rem; font-weight: 700; margin-bottom: 5px;}
-        .prontuario-subtitle { color: #6c757d; font-size: 1rem; margin-bottom: 15px;}
-        .prontuario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .prontuario-item { margin: 0; font-size: 1.05rem; }
-        .badge { background-color: #e8f4f8; padding: 4px 10px; border-radius: 20px; font-weight: bold; color: #0056b3; font-size: 0.95rem; }
-        
-        .timeline-card { background-color: white; padding: 20px; border-radius: 10px; border: 1px solid #e0e4e8; border-left: 4px solid #28a745; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-        .timeline-date { color: #28a745; font-weight: bold; font-size: 1.1rem; margin-bottom: 8px;}
         </style>
         """, unsafe_allow_html=True)
 
@@ -166,10 +158,10 @@ if tela_login():
 
         col_nome_p = next((c for c in df_pacientes.columns if 'nome' in c.lower() or 'paciente' in c.lower()), df_pacientes.columns[1])
 
-        tab_prontuario, tab_pacientes, tab_evolucoes = st.tabs(["🩺 Prontuário Eletrônico Longitudinal", "📋 Lista de Pacientes", "📈 Base Global"])
+        tab_prontuario, tab_pacientes, tab_evolucoes = st.tabs(["🩺 Prontuário Longitudinal", "📋 Lista de Pacientes", "📈 Base Global"])
         
         # ==========================================
-        # ABA 1: PRONTUÁRIO LONGITUDINAL
+        # ABA 1: PRONTUÁRIO LONGITUDINAL (CORRIGIDO)
         # ==========================================
         with tab_prontuario:
             st.markdown("### 🔍 Busca de Prontuário")
@@ -193,37 +185,45 @@ if tela_login():
                 val_cpf = str(d_pac[c_cpf]) if c_cpf and pd.notna(d_pac[c_cpf]) else "Não informado"
                 val_sit = str(d_pac[c_sit]) if c_sit and pd.notna(d_pac[c_sit]) else "Em andamento"
                 
+                # ----------------------------------------------------
+                # FICHA DE IDENTIFICAÇÃO (NATIVA STREAMLIT - SEM ERROS DE HTML)
+                # ----------------------------------------------------
                 st.markdown("---")
-
-                # IDENTIFICAÇÃO DO PACIENTE (CARTÃO CLÍNICO)
-                html_cartao = f"""
-                <div class="prontuario-header">
-                    <h3 class="prontuario-title">👤 {str(d_pac[col_nome_p]).upper()}</h3>
-                    <p class="prontuario-subtitle"><b>CNS:</b> {val_cns} &nbsp;|&nbsp; <b>CPF:</b> {val_cpf}</p>
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 15px 0;">
+                with st.container(border=True):
+                    # Cabeçalho Principal
+                    st.markdown(f"### 👤 {str(d_pac[col_nome_p]).upper()}")
+                    st.markdown(f"**CNS:** {val_cns} &nbsp;&nbsp;|&nbsp;&nbsp; **CPF:** {val_cpf}")
                     
-                    <div class="prontuario-grid">
-                        <div>
-                            <p class="prontuario-item"><b>Início TPT:</b> {str(d_pac[c_ini]) if c_ini else '-'}</p>
-                            <p class="prontuario-item"><b>Tratamento (Esquema):</b> {str(d_pac[c_esq]) if c_esq else '-'}</p>
-                            <p class="prontuario-item"><b>Posologia:</b> {str(d_pac[c_pos]) if c_pos else '-'}</p>
-                        </div>
-                        <div>
-                            <p class="prontuario-item"><b>Término Previsto:</b> {str(d_pac[c_ter]) if c_ter else '-'}</p>
-                            <p class="prontuario-item"><b>Próxima Consulta:</b> {str(d_pac[c_pro]) if c_pro else '-'}</p>
-                            <p class="prontuario-item" style="margin-top: 10px;"><b>Situação:</b> <span class="badge">{val_sit}</span></p>
-                        </div>
-                    </div>
-                </div>
-                """
-                st.markdown(html_cartao, unsafe_allow_html=True)
+                    st.divider()
+                    
+                    # Colunas de Dados
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown(f"**Início TPT:** {str(d_pac[c_ini]) if c_ini and pd.notna(d_pac[c_ini]) else '-'}")
+                        st.markdown(f"**Tratamento (Esquema):** {str(d_pac[c_esq]) if c_esq and pd.notna(d_pac[c_esq]) else '-'}")
+                        st.markdown(f"**Posologia:** {str(d_pac[c_pos]) if c_pos and pd.notna(d_pac[c_pos]) else '-'}")
+                    with c2:
+                        st.markdown(f"**Término Previsto:** {str(d_pac[c_ter]) if c_ter and pd.notna(d_pac[c_ter]) else '-'}")
+                        st.markdown(f"**Próxima Consulta:** {str(d_pac[c_pro]) if c_pro and pd.notna(d_pac[c_pro]) else '-'}")
+                        
+                        # Alertas Coloridos de Acordo com a Situação
+                        sit_lower = val_sit.lower()
+                        if 'óbito' in sit_lower or 'obito' in sit_lower:
+                            st.error(f"**Situação:** {val_sit}")
+                        elif 'alta' in sit_lower or 'completo' in sit_lower or 'cura' in sit_lower:
+                            st.success(f"**Situação:** {val_sit}")
+                        elif 'interrup' in sit_lower or 'abandono' in sit_lower or 'adversa' in sit_lower:
+                            st.warning(f"**Situação:** {val_sit}")
+                        else:
+                            st.info(f"**Situação:** {val_sit}")
+                # ----------------------------------------------------
 
                 # BOTÃO DE AÇÃO: ADICIONAR EVOLUÇÃO
                 with st.expander("➕ Adicionar Evolução Diária / Mensal", expanded=False):
                     st.info("Para registar o atendimento de hoje, preencha o formulário oficial. Os dados aparecerão na linha do tempo abaixo assim que atualizar a página.")
                     st.link_button("📝 Preencher Evolução do Paciente", LINK_FORM_EVOLUCAO, use_container_width=True)
 
-                # LINHA DO TEMPO (HISTÓRICO)
+                # LINHA DO TEMPO (HISTÓRICO) NATIVA DO STREAMLIT
                 st.markdown("### 🗓️ Histórico Longitudinal de Evoluções")
                 
                 if df_evolucoes is not None and not df_evolucoes.empty:
@@ -231,7 +231,6 @@ if tela_login():
                     hist_pac = df_evolucoes[df_evolucoes[col_nome_e].astype(str) == paciente_selecionado]
                     
                     if not hist_pac.empty:
-                        # Extratores para as Evoluções
                         ce_data = next((c for c in hist_pac.columns if 'data' in c.lower() or 'carimbo' in c.lower()), None)
                         ce_tipo = next((c for c in hist_pac.columns if 'tipo' in c.lower() or 'mês' in c.lower() or 'mes' in c.lower()), None)
                         ce_peso = next((c for c in hist_pac.columns if 'peso' in c.lower()), None)
@@ -240,26 +239,24 @@ if tela_login():
                         ce_relato = next((c for c in hist_pac.columns if 'adesão' in c.lower() or 'queixa' in c.lower() or 'relato' in c.lower()), None)
                         ce_cond = next((c for c in hist_pac.columns if 'conduta' in c.lower()), None)
 
-                        # Inverte para mostrar o mais recente primeiro
+                        # Inverte para mostrar a consulta mais recente no topo
                         hist_pac = hist_pac.iloc[::-1]
 
                         for _, row in hist_pac.iterrows():
                             r_data = str(row[ce_data]) if ce_data and pd.notna(row[ce_data]) else "Data não inf."
-                            r_tipo = str(row[ce_tipo]) if ce_tipo and pd.notna(row[ce_tipo]) else "Atendimento de Rotina"
+                            r_tipo = str(row[ce_tipo]) if ce_tipo and pd.notna(row[ce_tipo]) else "Rotina"
                             r_peso = str(row[ce_peso]) if ce_peso and pd.notna(row[ce_peso]) else "-"
                             r_sit = str(row[ce_sit]) if ce_sit and pd.notna(row[ce_sit]) else "-"
                             r_prox = str(row[ce_prox]) if ce_prox and pd.notna(row[ce_prox]) else "-"
-                            r_relato = str(row[ce_relato]) if ce_relato and pd.notna(row[ce_relato]) else "Sem relatos específicos."
+                            r_relato = str(row[ce_relato]) if ce_relato and pd.notna(row[ce_relato]) else "Sem relatos."
                             r_cond = str(row[ce_cond]) if ce_cond and pd.notna(row[ce_cond]) else "Sem conduta registada."
 
-                            st.markdown(f"""
-                            <div class="timeline-card">
-                                <div class="timeline-date">📅 {r_data} | {r_tipo}</div>
-                                <p style="margin-bottom: 5px;"><b>Situação:</b> {r_sit} &nbsp;|&nbsp; <b>Peso:</b> {r_peso} kg &nbsp;|&nbsp; <b>Próx. Consulta:</b> {r_prox}</p>
-                                <p style="margin-bottom: 5px;"><b>Adesão, Queixas e Tolerância:</b><br>{r_relato}</p>
-                                <p style="margin-bottom: 0;"><b>Conduta Médica/Enfermagem:</b><br>{r_cond}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            # Cartão de Evolução Nativo (Sem risco de vazar HTML)
+                            with st.container(border=True):
+                                st.markdown(f"#### 📅 {r_data} | {r_tipo}")
+                                st.markdown(f"**Situação:** {r_sit} &nbsp;&nbsp;|&nbsp;&nbsp; **Peso:** {r_peso} kg &nbsp;&nbsp;|&nbsp;&nbsp; **Próx. Consulta:** {r_prox}")
+                                st.markdown(f"**Adesão, Queixas e Tolerância:**<br>{r_relato}", unsafe_allow_html=True)
+                                st.markdown(f"**Conduta Médica/Enfermagem:**<br>{r_cond}", unsafe_allow_html=True)
                     else:
                         st.info("Nenhuma evolução diária ou mensal registada até o momento.")
                 else:
