@@ -5,7 +5,7 @@ import time
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="SIG-ILTB - Prontuário Eletrônico", layout="wide", page_icon="🔒")
 
-# 2. CENTRAL DE ACESSOS (SUA LISTA OFICIAL)
+# 2. CENTRAL DE ACESSOS
 USUARIOS = {
     "heraldo_admin": {"senha": "admin123", "nome_oficial": "TODAS"},
     "ist_hgni": {"senha": "ist_hgni", "nome_oficial": "AMBULATORIO DE IST DO HGNI"},
@@ -106,42 +106,43 @@ def tela_login():
         return False
     return True
 
-# 4. EXECUÇÃO DO PAINEL APÓS LOGIN
+# 4. PAINEL PRINCIPAL
 if tela_login():
     
     st.markdown("""
         <style>
-        .main { background-color: #f8f9fa; }
-        div[data-testid="stMetric"] { background-color: #ffffff; padding: 15px; border-radius: 10px; border-left: 5px solid #0056b3; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .info-label { font-size: 0.85rem; color: #6c757d; margin-bottom: 0px; padding-bottom: 0px; }
-        .info-value { font-size: 1.1rem; font-weight: 600; color: #212529; margin-top: 0px; padding-top: 0px; }
+        .main { background-color: #f4f6f9; }
+        .prontuario-header { background-color: white; padding: 25px; border-radius: 12px; border-left: 6px solid #0056b3; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;}
+        .prontuario-title { margin-top: 0; color: #0056b3; font-size: 1.8rem; font-weight: 700; margin-bottom: 5px;}
+        .prontuario-subtitle { color: #6c757d; font-size: 1rem; margin-bottom: 15px;}
+        .prontuario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .prontuario-item { margin: 0; font-size: 1.05rem; }
+        .badge { background-color: #e8f4f8; padding: 4px 10px; border-radius: 20px; font-weight: bold; color: #0056b3; font-size: 0.95rem; }
+        
+        .timeline-card { background-color: white; padding: 20px; border-radius: 10px; border: 1px solid #e0e4e8; border-left: 4px solid #28a745; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+        .timeline-date { color: #28a745; font-weight: bold; font-size: 1.1rem; margin-bottom: 8px;}
         </style>
         """, unsafe_allow_html=True)
 
     nome_unidade_atual = USUARIOS[st.session_state['usuario_atual']]["nome_oficial"]
 
     st.title("🏥 Prontuário Digital SIG-ILTB")
-    if st.session_state['usuario_atual'] == 'heraldo_admin':
-        st.caption("Visão Geral - Administração Central")
-    else:
-        st.caption(f"Unidade Ativa: {nome_unidade_atual}")
+    st.caption(f"Unidade Ativa: {nome_unidade_atual}" if st.session_state['usuario_atual'] != 'heraldo_admin' else "Visão Geral - Administração Central")
 
     SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
+    
+    # COLE O SEU LINK DO GOOGLE FORMS DE EVOLUÇÃO AQUI:
+    LINK_FORM_EVOLUCAO = "https://docs.google.com/forms/d/e/COLE_SEU_LINK_AQUI/viewform"
 
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/1085/1085810.png", width=80)
         st.markdown(f"**Logado como:** {st.session_state['usuario_atual']}")
-        
         if st.button('🔄 ATUALIZAR DADOS', use_container_width=True):
             st.cache_data.clear()
             st.rerun()
-            
         if st.button('🚪 SAIR DO SISTEMA', use_container_width=True):
             st.session_state["autenticado"] = False
             st.rerun()
-            
-        st.divider()
-        st.caption("Nova Iguaçu - Vigilância Ativa")
 
     @st.cache_data(ttl=15)
     def carregar_dados_oficiais():
@@ -149,7 +150,6 @@ if tela_login():
             agora = int(time.time())
             url_p = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes&nocache={agora}"
             url_e = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes&nocache={agora}"
-            
             df_p = pd.read_csv(url_p, on_bad_lines='skip')
             df_e = pd.read_csv(url_e, on_bad_lines='skip')
             return df_p, df_e
@@ -159,110 +159,117 @@ if tela_login():
     df_pacientes, df_evolucoes = carregar_dados_oficiais()
 
     if df_pacientes is not None and not df_pacientes.empty:
-        
-        # Filtro de Unidade
         if st.session_state['usuario_atual'] != 'heraldo_admin':
-            colunas_unidade = [col for col in df_pacientes.columns if 'unidade' in col.lower() or 'local' in col.lower()]
-            if colunas_unidade:
-                col_unidade = colunas_unidade[0]
+            col_unidade = next((col for col in df_pacientes.columns if 'unidade' in col.lower() or 'local' in col.lower()), None)
+            if col_unidade:
                 df_pacientes = df_pacientes[df_pacientes[col_unidade].astype(str).str.contains(nome_unidade_atual, case=False, na=False)]
 
-        col_nome_paciente = next((c for c in df_pacientes.columns if 'nome' in c.lower() or 'paciente' in c.lower()), df_pacientes.columns[1])
+        col_nome_p = next((c for c in df_pacientes.columns if 'nome' in c.lower() or 'paciente' in c.lower()), df_pacientes.columns[1])
 
-        tab_prontuario, tab_pacientes, tab_evolucoes = st.tabs([
-            "🩺 Prontuário Individual", 
-            "📋 Tabela Geral", 
-            "📈 Base de Evoluções"
-        ])
+        tab_prontuario, tab_pacientes, tab_evolucoes = st.tabs(["🩺 Prontuário Eletrônico Longitudinal", "📋 Lista de Pacientes", "📈 Base Global"])
         
         # ==========================================
-        # ABA 1: PRONTUÁRIO DIGITAL INTELIGENTE
+        # ABA 1: PRONTUÁRIO LONGITUDINAL
         # ==========================================
         with tab_prontuario:
-            st.markdown("### 🔍 Busca de Paciente")
-            lista_pacientes = ["Selecione um paciente..."] + sorted(df_pacientes[col_nome_paciente].dropna().astype(str).unique().tolist())
-            paciente_selecionado = st.selectbox("Digite ou selecione o nome do paciente:", lista_pacientes, label_visibility="collapsed")
+            st.markdown("### 🔍 Busca de Prontuário")
+            lista_pacientes = ["Selecione um paciente..."] + sorted(df_pacientes[col_nome_p].dropna().astype(str).unique().tolist())
+            paciente_selecionado = st.selectbox("Busque o paciente para iniciar a evolução:", lista_pacientes, label_visibility="collapsed")
 
             if paciente_selecionado != "Selecione um paciente...":
-                dados_paciente = df_pacientes[df_pacientes[col_nome_paciente] == paciente_selecionado].iloc[0]
+                d_pac = df_pacientes[df_pacientes[col_nome_p] == paciente_selecionado].iloc[0]
                 
-                # Identificação dinâmica das colunas do Google Forms
-                col_sit = next((c for c in df_pacientes.columns if 'situação' in c.lower() or 'situacao' in c.lower() or 'encerramento' in c.lower()), None)
-                col_peso = next((c for c in df_pacientes.columns if 'peso' in c.lower()), None)
-                col_med = next((c for c in df_pacientes.columns if 'medicamento' in c.lower() or 'esquema' in c.lower()), None)
-                col_inicio = next((c for c in df_pacientes.columns if 'início' in c.lower() or 'inicio' in c.lower()), None)
-                col_doses = next((c for c in df_pacientes.columns if 'doses' in c.lower() or 'tomadas' in c.lower()), None)
-                col_termino = next((c for c in df_pacientes.columns if 'término' in c.lower() or 'termino' in c.lower()), None)
-                col_causa = next((c for c in df_pacientes.columns if 'causa' in c.lower() or 'óbito' in c.lower() or 'justificativa' in c.lower()), None)
+                # Extratores Inteligentes
+                c_cns = next((c for c in df_pacientes.columns if 'cns' in c.lower() or 'cartão' in c.lower()), None)
+                c_cpf = next((c for c in df_pacientes.columns if 'cpf' in c.lower()), None)
+                c_sit = next((c for c in df_pacientes.columns if 'situa' in c.lower() or 'encerra' in c.lower()), None)
+                c_esq = next((c for c in df_pacientes.columns if 'esquema' in c.lower() or 'medicamento' in c.lower()), None)
+                c_pos = next((c for c in df_pacientes.columns if 'posologia' in c.lower()), None)
+                c_ini = next((c for c in df_pacientes.columns if 'início' in c.lower() or 'inicio' in c.lower()), None)
+                c_ter = next((c for c in df_pacientes.columns if 'término' in c.lower() or 'termino' in c.lower()), None)
+                c_pro = next((c for c in df_pacientes.columns if 'próxima' in c.lower() or 'retorno' in c.lower()), None)
                 
-                # Extração segura dos dados
-                situacao_atual = str(dados_paciente[col_sit]) if col_sit and pd.notna(dados_paciente[col_sit]) else "Em andamento"
-                peso = str(dados_paciente[col_peso]) if col_peso and pd.notna(dados_paciente[col_peso]) else "Não inf."
-                medicamento = str(dados_paciente[col_med]) if col_med and pd.notna(dados_paciente[col_med]) else "Não inf."
-                data_inicio = str(dados_paciente[col_inicio]) if col_inicio and pd.notna(dados_paciente[col_inicio]) else "Não inf."
-                doses = str(dados_paciente[col_doses]) if col_doses and pd.notna(dados_paciente[col_doses]) else "0"
-                data_termino = str(dados_paciente[col_termino]) if col_termino and pd.notna(dados_paciente[col_termino]) else "Não inf."
-                causa_obito = str(dados_paciente[col_causa]) if col_causa and pd.notna(dados_paciente[col_causa]) else "Não informada"
+                val_cns = str(d_pac[c_cns]) if c_cns and pd.notna(d_pac[c_cns]) else "Não informado"
+                val_cpf = str(d_pac[c_cpf]) if c_cpf and pd.notna(d_pac[c_cpf]) else "Não informado"
+                val_sit = str(d_pac[c_sit]) if c_sit and pd.notna(d_pac[c_sit]) else "Em andamento"
                 
                 st.markdown("---")
-                
-                # BANDEIRAS VISUAIS DE STATUS (Alertas)
-                sit_lower = situacao_atual.lower()
-                if 'óbito' in sit_lower or 'obito' in sit_lower:
-                    st.error(f"🚨 **FICHA ENCERRADA - ÓBITO** | Causa Registada: {causa_obito}")
-                elif 'completo' in sit_lower or 'alta' in sit_lower or 'cura' in sit_lower:
-                    st.success(f"🏁 **TRATAMENTO COMPLETO** | Paciente recebeu alta com sucesso.")
-                elif 'reação' in sit_lower or 'reacao' in sit_lower or 'adversa' in sit_lower:
-                    st.warning(f"⚠️ **TRATAMENTO SUSPENSO** | Motivo: Reação adversa ao medicamento.")
-                elif 'interrupção' in sit_lower or 'interrupcao' in sit_lower or 'abandono' in sit_lower:
-                    st.warning(f"⚠️ **ALERTA DE BUSCA ATIVA** | Interrupção do tratamento identificada.")
-                else:
-                    st.info(f"🟢 **EM ANDAMENTO** | Acompanhamento ativo na unidade.")
 
-                # CARTÃO DO PACIENTE (Novo Design Clínico)
-                st.markdown("#### 👤 Dados Clínicos e Tratamento")
-                with st.container(border=True):
-                    # Linha 1
-                    r1c1, r1c2, r1c3 = st.columns([2, 1, 2])
-                    r1c1.markdown(f"<p class='info-label'>Nome do Paciente</p><p class='info-value'>{dados_paciente[col_nome_paciente]}</p>", unsafe_allow_html=True)
-                    r1c2.markdown(f"<p class='info-label'>Peso Corporal</p><p class='info-value'>{peso} kg</p>", unsafe_allow_html=True)
-                    r1c3.markdown(f"<p class='info-label'>Medicamento / Esquema</p><p class='info-value'>{medicamento}</p>", unsafe_allow_html=True)
+                # IDENTIFICAÇÃO DO PACIENTE (CARTÃO CLÍNICO)
+                html_cartao = f"""
+                <div class="prontuario-header">
+                    <h3 class="prontuario-title">👤 {str(d_pac[col_nome_p]).upper()}</h3>
+                    <p class="prontuario-subtitle"><b>CNS:</b> {val_cns} &nbsp;|&nbsp; <b>CPF:</b> {val_cpf}</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 15px 0;">
                     
-                    st.divider()
-                    
-                    # Linha 2
-                    r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-                    r2c1.markdown(f"<p class='info-label'>Data Início TPT</p><p class='info-value'>{data_inicio}</p>", unsafe_allow_html=True)
-                    r2c2.markdown(f"<p class='info-label'>Nº Doses Tomadas</p><p class='info-value'>{doses}</p>", unsafe_allow_html=True)
-                    r2c3.markdown(f"<p class='info-label'>Data Término Prevista</p><p class='info-value'>{data_termino}</p>", unsafe_allow_html=True)
-                    r2c4.markdown(f"<p class='info-label'>Situação de Encerramento</p><p class='info-value'>{situacao_atual}</p>", unsafe_allow_html=True)
+                    <div class="prontuario-grid">
+                        <div>
+                            <p class="prontuario-item"><b>Início TPT:</b> {str(d_pac[c_ini]) if c_ini else '-'}</p>
+                            <p class="prontuario-item"><b>Tratamento (Esquema):</b> {str(d_pac[c_esq]) if c_esq else '-'}</p>
+                            <p class="prontuario-item"><b>Posologia:</b> {str(d_pac[c_pos]) if c_pos else '-'}</p>
+                        </div>
+                        <div>
+                            <p class="prontuario-item"><b>Término Previsto:</b> {str(d_pac[c_ter]) if c_ter else '-'}</p>
+                            <p class="prontuario-item"><b>Próxima Consulta:</b> {str(d_pac[c_pro]) if c_pro else '-'}</p>
+                            <p class="prontuario-item" style="margin-top: 10px;"><b>Situação:</b> <span class="badge">{val_sit}</span></p>
+                        </div>
+                    </div>
+                </div>
+                """
+                st.markdown(html_cartao, unsafe_allow_html=True)
 
-                # SUBFORMULÁRIO DE EVOLUÇÕES
-                st.markdown("<br>#### 🗓️ Histórico de Consultas e Intercorrências", unsafe_allow_html=True)
+                # BOTÃO DE AÇÃO: ADICIONAR EVOLUÇÃO
+                with st.expander("➕ Adicionar Evolução Diária / Mensal", expanded=False):
+                    st.info("Para registar o atendimento de hoje, preencha o formulário oficial. Os dados aparecerão na linha do tempo abaixo assim que atualizar a página.")
+                    st.link_button("📝 Preencher Evolução do Paciente", LINK_FORM_EVOLUCAO, use_container_width=True)
+
+                # LINHA DO TEMPO (HISTÓRICO)
+                st.markdown("### 🗓️ Histórico Longitudinal de Evoluções")
                 
                 if df_evolucoes is not None and not df_evolucoes.empty:
-                    col_nome_evolucao = next((c for c in df_evolucoes.columns if 'nome' in c.lower() or 'paciente' in c.lower()), df_evolucoes.columns[1])
-                    historico_paciente = df_evolucoes[df_evolucoes[col_nome_evolucao].astype(str) == paciente_selecionado]
+                    col_nome_e = next((c for c in df_evolucoes.columns if 'nome' in c.lower() or 'paciente' in c.lower()), df_evolucoes.columns[1])
+                    hist_pac = df_evolucoes[df_evolucoes[col_nome_e].astype(str) == paciente_selecionado]
                     
-                    if not historico_paciente.empty:
-                        st.dataframe(historico_paciente, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Nenhuma consulta de acompanhamento registada para este paciente até ao momento.")
-                else:
-                    st.warning("A base de evoluções ainda está vazia ou a carregar.")
+                    if not hist_pac.empty:
+                        # Extratores para as Evoluções
+                        ce_data = next((c for c in hist_pac.columns if 'data' in c.lower() or 'carimbo' in c.lower()), None)
+                        ce_tipo = next((c for c in hist_pac.columns if 'tipo' in c.lower() or 'mês' in c.lower() or 'mes' in c.lower()), None)
+                        ce_peso = next((c for c in hist_pac.columns if 'peso' in c.lower()), None)
+                        ce_sit = next((c for c in hist_pac.columns if 'situa' in c.lower() or 'tratamento' in c.lower()), None)
+                        ce_prox = next((c for c in hist_pac.columns if 'próxima' in c.lower() or 'retorno' in c.lower()), None)
+                        ce_relato = next((c for c in hist_pac.columns if 'adesão' in c.lower() or 'queixa' in c.lower() or 'relato' in c.lower()), None)
+                        ce_cond = next((c for c in hist_pac.columns if 'conduta' in c.lower()), None)
 
-        # ==========================================
-        # ABA 2 e 3: TABELAS GERAIS
-        # ==========================================
+                        # Inverte para mostrar o mais recente primeiro
+                        hist_pac = hist_pac.iloc[::-1]
+
+                        for _, row in hist_pac.iterrows():
+                            r_data = str(row[ce_data]) if ce_data and pd.notna(row[ce_data]) else "Data não inf."
+                            r_tipo = str(row[ce_tipo]) if ce_tipo and pd.notna(row[ce_tipo]) else "Atendimento de Rotina"
+                            r_peso = str(row[ce_peso]) if ce_peso and pd.notna(row[ce_peso]) else "-"
+                            r_sit = str(row[ce_sit]) if ce_sit and pd.notna(row[ce_sit]) else "-"
+                            r_prox = str(row[ce_prox]) if ce_prox and pd.notna(row[ce_prox]) else "-"
+                            r_relato = str(row[ce_relato]) if ce_relato and pd.notna(row[ce_relato]) else "Sem relatos específicos."
+                            r_cond = str(row[ce_cond]) if ce_cond and pd.notna(row[ce_cond]) else "Sem conduta registada."
+
+                            st.markdown(f"""
+                            <div class="timeline-card">
+                                <div class="timeline-date">📅 {r_data} | {r_tipo}</div>
+                                <p style="margin-bottom: 5px;"><b>Situação:</b> {r_sit} &nbsp;|&nbsp; <b>Peso:</b> {r_peso} kg &nbsp;|&nbsp; <b>Próx. Consulta:</b> {r_prox}</p>
+                                <p style="margin-bottom: 5px;"><b>Adesão, Queixas e Tolerância:</b><br>{r_relato}</p>
+                                <p style="margin-bottom: 0;"><b>Conduta Médica/Enfermagem:</b><br>{r_cond}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("Nenhuma evolução diária ou mensal registada até o momento.")
+                else:
+                    st.warning("Base de evoluções vazia ou desconectada.")
+
         with tab_pacientes:
-            st.markdown("### 📋 Visão Geral da Base")
             st.dataframe(df_pacientes, use_container_width=True, hide_index=True)
             
         with tab_evolucoes:
-            st.markdown("### 📈 Histórico Global de Consultas")
-            if df_evolucoes is not None and not df_evolucoes.empty:
+            if df_evolucoes is not None:
                 st.dataframe(df_evolucoes, use_container_width=True, hide_index=True)
-            else:
-                st.info("Aguardando os primeiros registos...")
     else:
-        st.error("⚠️ Nenhum dado encontrado. A base está vazia ou a unidade não possui pacientes.")
+        st.error("⚠️ Nenhum dado de paciente encontrado para a sua unidade.")
