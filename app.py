@@ -14,8 +14,6 @@ if st.sidebar.button('🔄 ATUALIZAR DADOS AGORA'):
 @st.cache_data(ttl=10) # Guarda a memória por no máximo 10 segundos
 def carregar_dados():
     try:
-        # A MÁGICA: Colocamos a hora atual dentro do link. 
-        # Como a hora muda a cada segundo, o Google é forçado a gerar um arquivo CSV novo!
         agora = int(time.time()) 
         
         url_p = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes&nocache={agora}"
@@ -24,9 +22,8 @@ def carregar_dados():
         df_pacientes = pd.read_csv(url_p)
         df_evolucoes = pd.read_csv(url_e)
         return df_pacientes, df_evolucoes
-   except Exception as e:
+    except Exception as e:
         st.error(f"Ocorreu um erro ao ler o Google: {e}")
         return None, None
-
 # Carrega as planilhas
 df_pacientes, df_evolucoes = carregar_dados()
