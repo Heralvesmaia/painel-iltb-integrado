@@ -24,7 +24,8 @@ def carregar_dados():
         df_pacientes = pd.read_csv(url_p)
         df_evolucoes = pd.read_csv(url_e)
         return df_pacientes, df_evolucoes
-    except Exception as e:
+   except Exception as e:
+        st.error(f"Ocorreu um erro ao ler o Google: {e}")
         return None, None
 
 # Carrega as planilhas
