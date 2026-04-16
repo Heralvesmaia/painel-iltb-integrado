@@ -110,19 +110,18 @@ def tela_login():
 if tela_login():
     
     st.markdown("""
-        <style>
-        .main { background-color: #f4f6f9; }
-        .prontuario-header { background-color: white; padding: 25px; border-radius: 12px; border-left: 6px solid #0056b3; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;}
-        .prontuario-title { margin-top: 0; color: #0056b3; font-size: 1.8rem; font-weight: 700; margin-bottom: 5px;}
-        .prontuario-subtitle { color: #6c757d; font-size: 1rem; margin-bottom: 15px;}
-        .prontuario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .prontuario-item { margin: 0; font-size: 1.05rem; }
-        .badge { background-color: #e8f4f8; padding: 4px 10px; border-radius: 20px; font-weight: bold; color: #0056b3; font-size: 0.95rem; }
-        
-        .timeline-card { background-color: white; padding: 20px; border-radius: 10px; border: 1px solid #e0e4e8; border-left: 4px solid #28a745; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
-        .timeline-date { color: #28a745; font-weight: bold; font-size: 1.1rem; margin-bottom: 8px;}
-        </style>
-        """, unsafe_allow_html=True)
+<style>
+.main { background-color: #f4f6f9; }
+.prontuario-header { background-color: white; padding: 25px; border-radius: 12px; border-left: 6px solid #0056b3; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px;}
+.prontuario-title { margin-top: 0; color: #0056b3; font-size: 1.8rem; font-weight: 700; margin-bottom: 5px;}
+.prontuario-subtitle { color: #6c757d; font-size: 1rem; margin-bottom: 15px;}
+.prontuario-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.prontuario-item { margin: 0; font-size: 1.05rem; }
+.badge { background-color: #e8f4f8; padding: 4px 10px; border-radius: 20px; font-weight: bold; color: #0056b3; font-size: 0.95rem; }
+.timeline-card { background-color: white; padding: 20px; border-radius: 10px; border: 1px solid #e0e4e8; border-left: 4px solid #28a745; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);}
+.timeline-date { color: #28a745; font-weight: bold; font-size: 1.1rem; margin-bottom: 8px;}
+</style>
+""", unsafe_allow_html=True)
 
     nome_unidade_atual = USUARIOS[st.session_state['usuario_atual']]["nome_oficial"]
 
@@ -196,26 +195,27 @@ if tela_login():
                 st.markdown("---")
 
                 # IDENTIFICAÇÃO DO PACIENTE (CARTÃO CLÍNICO)
+                # Removidos os espaços antes do HTML para o Streamlit não achar que é um bloco de código
                 html_cartao = f"""
-                <div class="prontuario-header">
-                    <h3 class="prontuario-title">👤 {str(d_pac[col_nome_p]).upper()}</h3>
-                    <p class="prontuario-subtitle"><b>CNS:</b> {val_cns} &nbsp;|&nbsp; <b>CPF:</b> {val_cpf}</p>
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 15px 0;">
-                    
-                    <div class="prontuario-grid">
-                        <div>
-                            <p class="prontuario-item"><b>Início TPT:</b> {str(d_pac[c_ini]) if c_ini else '-'}</p>
-                            <p class="prontuario-item"><b>Tratamento (Esquema):</b> {str(d_pac[c_esq]) if c_esq else '-'}</p>
-                            <p class="prontuario-item"><b>Posologia:</b> {str(d_pac[c_pos]) if c_pos else '-'}</p>
-                        </div>
-                        <div>
-                            <p class="prontuario-item"><b>Término Previsto:</b> {str(d_pac[c_ter]) if c_ter else '-'}</p>
-                            <p class="prontuario-item"><b>Próxima Consulta:</b> {str(d_pac[c_pro]) if c_pro else '-'}</p>
-                            <p class="prontuario-item" style="margin-top: 10px;"><b>Situação:</b> <span class="badge">{val_sit}</span></p>
-                        </div>
-                    </div>
-                </div>
-                """
+<div class="prontuario-header">
+    <h3 class="prontuario-title">👤 {str(d_pac[col_nome_p]).upper()}</h3>
+    <p class="prontuario-subtitle"><b>CNS:</b> {val_cns} &nbsp;|&nbsp; <b>CPF:</b> {val_cpf}</p>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 15px 0;">
+    
+    <div class="prontuario-grid">
+        <div>
+            <p class="prontuario-item"><b>Início TPT:</b> {str(d_pac[c_ini]) if c_ini else '-'}</p>
+            <p class="prontuario-item"><b>Tratamento (Esquema):</b> {str(d_pac[c_esq]) if c_esq else '-'}</p>
+            <p class="prontuario-item"><b>Posologia:</b> {str(d_pac[c_pos]) if c_pos else '-'}</p>
+        </div>
+        <div>
+            <p class="prontuario-item"><b>Término Previsto:</b> {str(d_pac[c_ter]) if c_ter else '-'}</p>
+            <p class="prontuario-item"><b>Próxima Consulta:</b> {str(d_pac[c_pro]) if c_pro else '-'}</p>
+            <p class="prontuario-item" style="margin-top: 10px;"><b>Situação:</b> <span class="badge">{val_sit}</span></p>
+        </div>
+    </div>
+</div>
+"""
                 st.markdown(html_cartao, unsafe_allow_html=True)
 
                 # BOTÃO DE AÇÃO: ADICIONAR EVOLUÇÃO
@@ -252,14 +252,16 @@ if tela_login():
                             r_relato = str(row[ce_relato]) if ce_relato and pd.notna(row[ce_relato]) else "Sem relatos específicos."
                             r_cond = str(row[ce_cond]) if ce_cond and pd.notna(row[ce_cond]) else "Sem conduta registada."
 
-                            st.markdown(f"""
-                            <div class="timeline-card">
-                                <div class="timeline-date">📅 {r_data} | {r_tipo}</div>
-                                <p style="margin-bottom: 5px;"><b>Situação:</b> {r_sit} &nbsp;|&nbsp; <b>Peso:</b> {r_peso} kg &nbsp;|&nbsp; <b>Próx. Consulta:</b> {r_prox}</p>
-                                <p style="margin-bottom: 5px;"><b>Adesão, Queixas e Tolerância:</b><br>{r_relato}</p>
-                                <p style="margin-bottom: 0;"><b>Conduta Médica/Enfermagem:</b><br>{r_cond}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            # Cartão de evolução alinhado à esquerda
+                            html_evolucao = f"""
+<div class="timeline-card">
+    <div class="timeline-date">📅 {r_data} | {r_tipo}</div>
+    <p style="margin-bottom: 5px;"><b>Situação:</b> {r_sit} &nbsp;|&nbsp; <b>Peso:</b> {r_peso} kg &nbsp;|&nbsp; <b>Próx. Consulta:</b> {r_prox}</p>
+    <p style="margin-bottom: 5px;"><b>Adesão, Queixas e Tolerância:</b><br>{r_relato}</p>
+    <p style="margin-bottom: 0;"><b>Conduta Médica/Enfermagem:</b><br>{r_cond}</p>
+</div>
+"""
+                            st.markdown(html_evolucao, unsafe_allow_html=True)
                     else:
                         st.info("Nenhuma evolução diária ou mensal registada até o momento.")
                 else:
