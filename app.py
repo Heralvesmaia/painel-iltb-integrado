@@ -11,7 +11,7 @@ st.markdown("""
     .main { background-color: #f5f7f9; }
     stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     </style>
-    """, unsafe_base_with_whitespace=True)
+    """, unsafe_allow_html=True)
 
 st.title("📊 Painel de Monitorização SIG-ILTB")
 st.subheader("Vigilância Ativa - Nova Iguaçu")
