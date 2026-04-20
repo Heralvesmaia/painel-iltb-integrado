@@ -4,126 +4,138 @@ import time
 import re
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="SIG-ILTB - Prontuário Eletrônico", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="SIG-ILTB - Prontuário Longitudinal", layout="wide", page_icon="🏥")
 
-# Função para garantir que o ID (CNS/CPF) seja lido como texto puro e sem .0
-def limpar_id(valor):
+# Função para limpar IDs (CNS/CPF) e evitar erro de .0 ou espaços
+def purificar_id(valor):
     if pd.isna(valor) or valor == "": return ""
-    v = str(valor).strip()
-    if v.endswith('.0'): v = v[:-2]
-    return re.sub(r'[^0-9]', '', v) # Mantém apenas números
+    v = str(valor).strip().split('.')[0] # Remove .0 se houver
+    return re.sub(r'[^0-9]', '', v) # Deixa só números
 
-# 2. CENTRAL DE ACESSOS (Mantida conforme solicitado)
+# 2. CENTRAL DE ACESSOS (Lista oficial)
 USUARIOS = {
     "heraldo_admin": {"senha": "admin123", "nome_oficial": "TODAS"},
     "ist_hgni": {"senha": "ist_hgni", "nome_oficial": "AMBULATORIO DE IST DO HGNI"},
-    "cf_austin": {"senha": "cf_austin", "nome_oficial": "UBS AUSTIN"},
-    # ... (Suas outras unidades aqui)
+    "ubs_austin": {"senha": "ubs_austin", "nome_oficial": "UBS AUSTIN"},
+    # Adicione as outras conforme a sua lista...
 }
 
-# 3. FUNÇÃO DE LOGIN
-def tela_login():
-    if "autenticado" not in st.session_state:
-        st.session_state["autenticado"] = False
-    if not st.session_state["autenticado"]:
-        st.markdown("<h1 style='text-align: center;'>🔐 Sistema SIG-ILTB</h1>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            with st.form("login"):
-                u = st.text_input("Utilizador").lower().strip()
-                s = st.text_input("Senha", type="password").strip()
-                if st.form_submit_button("Entrar"):
-                    # Verificação simplificada para teste, use seu dicionário USUARIOS real aqui
-                    if u == "heraldo_admin" and s == "admin123":
-                        st.session_state["autenticado"] = True
-                        st.session_state["usuario_atual"] = u
-                        st.rerun()
-                    else: st.error("Incorreto")
-        return False
-    return True
+# 3. LOGIN
+if "autenticado" not in st.session_state: st.session_state["autenticado"] = False
 
-if tela_login():
-    st.markdown("""<style>.main { background-color: #f4f6f9; } .stMetric { background-color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #0056b3; }</style>""", unsafe_allow_html=True)
-    
-    SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
-    
-    @st.cache_data(ttl=10)
-    def carregar_dados():
+if not st.session_state["autenticado"]:
+    st.markdown("<h1 style='text-align: center;'>🔐 SIG-ILTB Login</h1>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        with st.form("login"):
+            u = st.text_input("Utilizador").lower().strip()
+            s = st.text_input("Senha", type="password").strip()
+            if st.form_submit_button("Entrar"):
+                if u in USUARIOS and USUARIOS[u]["senha"] == s:
+                    st.session_state["autenticado"], st.session_state["usuario_atual"] = True, u
+                    st.rerun()
+                else: st.error("Utilizador ou Senha inválidos.")
+    st.stop()
+
+# 4. CARREGAMENTO DE DADOS
+SHEET_ID = "1cG2uey69Vb2nnu_n-m5VTEwKuAnvCs2OkaQIvN7Izs8"
+
+@st.cache_data(ttl=5) # Atualiza quase em tempo real
+def buscar_dados():
+    try:
         url_p = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Pacientes"
         url_e = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Evolucoes"
-        # Lemos tudo como string para evitar o erro do .0 nos documentos
+        
+        # Lendo como string para não corromper CNS/CPF
         df_p = pd.read_csv(url_p, dtype=str).fillna("")
         df_e = pd.read_csv(url_e, dtype=str).fillna("")
         
-        # Limpeza de colunas e IDs
+        # Limpando nomes de colunas
         df_p.columns = df_p.columns.str.strip()
         df_e.columns = df_e.columns.str.strip()
         
-        df_p['ID_LINK'] = df_p['Cns_Cpf (Id)'].apply(limpar_id)
-        df_e['ID_LINK'] = df_e['Cns_Cpf (Id)'].apply(limpar_id)
+        # Criando chaves de ligação limpas
+        df_p['CHAVE'] = df_p['Cns_Cpf (Id)'].apply(purificar_id)
+        df_e['CHAVE'] = df_e['Cns_Cpf (Id)'].apply(purificar_id)
+        
         return df_p, df_e
+    except Exception as e:
+        st.error(f"Erro ao conectar com Google: {e}")
+        return None, None
 
-    df_pacientes, df_evolucoes = carregar_dados()
+df_p, df_e = buscar_dados()
 
-    if df_pacientes is not None:
-        tab1, tab2, tab3 = st.tabs(["🩺 Prontuário Longitudinal", "📋 Lista de Pacientes", "📈 Base Global"])
+# 5. INTERFACE DO PRONTUÁRIO
+if df_p is not None:
+    # Filtro por unidade
+    u_logado = st.session_state["usuario_atual"]
+    nome_unidade = USUARIOS[u_logado]["nome_oficial"]
+    if u_logado != "heraldo_admin":
+        df_p = df_p[df_p["Unidade De Tratamento"].str.contains(nome_unidade, case=False, na=False)]
 
-        with tab1:
-            st.markdown("### 🔍 Busca de Prontuário")
-            nomes = ["Selecione..."] + sorted(df_pacientes["Nome Do Paciente"].unique().tolist())
-            escolha = st.selectbox("Paciente:", nomes, label_visibility="collapsed")
+    tab1, tab2, tab3 = st.tabs(["🩺 Prontuário Longitudinal", "📋 Lista Geral", "📊 Base Global"])
 
-            if escolha != "Selecione...":
-                p = df_pacientes[df_pacientes["Nome Do Paciente"] == escolha].iloc[0]
-                id_paciente = p['ID_LINK']
-                
-                # Busca evoluções deste paciente
-                evols = df_evolucoes[df_evolucoes['ID_LINK'] == id_paciente]
-                
-                # Dados dinâmicos vindos da última evolução (se existir)
-                prox_con = "-"
-                sit_final = p['Situação Atual']
-                peso_atual = "-"
-                
-                if not evols.empty:
-                    ultima = evols.iloc[-1] # Pega a última linha da Aba Evoluções
-                    prox_con = ultima['Data Da Próxima Consulta']
-                    sit_final = ultima['Nova Situação']
-                    peso_atual = ultima['Peso Corporal (kg)']
+    with tab1:
+        st.markdown("### 🔍 Busca de Prontuário")
+        nomes = ["Selecione..."] + sorted(df_p["Nome Do Paciente"].unique().tolist())
+        paciente = st.selectbox("Escolha o Paciente:", nomes, label_visibility="collapsed")
 
-                st.markdown("---")
-                # --- CABEÇALHO DO PRONTUÁRIO ---
-                st.subheader(f"👤 {escolha.upper()}")
-                st.write(f"**CNS/CPF:** {p['Cns_Cpf (Id)']} &nbsp;|&nbsp; **Raça/Cor:** {p['Raça/Cor']} &nbsp;|&nbsp; **Nacionalidade:** {p['Nacionalidade']}")
-                
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns(3)
-                    c1.markdown(f"**Início TPT:** {p['Início Tpt']}")
-                    c1.markdown(f"**Tratamento:** {p['Medicamento']}")
-                    
-                    c2.markdown(f"**Gestante:** {p['Gestante']}")
-                    c2.markdown(f"**Peso Atual:** {peso_atual} kg")
-                    
-                    # Como "Posologia" e "Término" não existem como colunas na sua planilha, 
-                    # o sistema avisa ou calcula (Término não foi mapeado no seu formulário)
-                    c3.markdown(f"**Posologia:** (Não mapeado)")
-                    c3.markdown(f"**Próxima Consulta:** :blue[{prox_con}]")
-                
-                if "óbito" in sit_final.lower(): st.error(f"SITUAÇÃO: {sit_final.upper()}")
-                elif "andamento" in sit_final.lower(): st.info(f"SITUAÇÃO: {sit_final.upper()}")
-                else: st.success(f"SITUAÇÃO: {sit_final.upper()}")
+        if paciente != "Selecione...":
+            # Pega os dados do paciente na Aba 1
+            dados = df_p[df_p["Nome Do Paciente"] == paciente].iloc[0]
+            chave_paciente = dados['CHAVE']
 
-                st.markdown("### 🗓️ Histórico Longitudinal de Evoluções")
-                if not evols.empty:
-                    # Inverter para mostrar a mais recente primeiro
-                    for _, row in evols.iloc[::-1].iterrows():
-                        with st.container(border=True):
-                            st.markdown(f"**📅 {row['Data Da Consulta']} - {row['Tipo De Retorno (Mês)']}**")
-                            st.write(f"**Relato Clínico:** {row['Relato Clínico']}")
-                            st.write(f"**Conduta:** {row['Conduta']}")
-                            st.caption(f"Peso: {row['Peso Corporal (kg)']}kg | Medicamento: {row['Medicamento']}")
-                else:
-                    st.warning("⚠️ Nenhuma evolução encontrada na aba 'Evolucoes' para este ID.")
+            # Busca evoluções (Tenta por ID, se falhar tenta por Nome)
+            historico = df_e[df_e['CHAVE'] == chave_paciente]
+            if historico.empty:
+                # Fallback: Busca por nome se o ID falhar
+                historico = df_e[df_e['Cns_Cpf (Id)'].str.contains(paciente, case=False, na=False)]
 
-        with tab2: st.dataframe(df_pacientes)
-        with tab3: st.dataframe(df_evolucoes)
+            # Dados da última consulta para o cabeçalho
+            peso_v = "-"; prox_v = "-"; sit_v = dados['Situação Atual']
+            if not historico.empty:
+                u_c = historico.iloc[-1]
+                peso_v = u_c.get('Peso Corporal (kg)', '-')
+                prox_v = u_c.get('Data Da Próxima Consulta', '-')
+                sit_v = u_c.get('Nova Situação', sit_v)
+
+            # --- EXIBIÇÃO DO CARTÃO ---
+            st.markdown(f"## 👤 {paciente.upper()}")
+            st.write(f"**CNS/CPF:** {dados['Cns_Cpf (Id)']} | **Raça/Cor:** {dados['Raça/Cor']} | **Nacionalidade:** {dados['Nacionalidade']}")
+            
+            with st.container(border=True):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.write(f"**Início TPT:** {dados['Início Tpt']}")
+                    st.write(f"**Tratamento:** {dados['Medicamento']}")
+                with c2:
+                    st.write(f"**Gestante:** {dados['Gestante']}")
+                    st.write(f"**Peso Atual:** {peso_v} kg")
+                with c3:
+                    st.write(f"**Posologia:** (Não mapeado no Cadastro)")
+                    st.write(f"**Próxima Consulta:** :blue[{prox_v}]")
+            
+            # Status Colorido
+            if "óbito" in sit_v.lower(): st.error(f"SITUAÇÃO: {sit_v.upper()}")
+            elif "andamento" in sit_v.lower(): st.info(f"SITUAÇÃO: {sit_v.upper()}")
+            else: st.success(f"SITUAÇÃO: {sit_v.upper()}")
+
+            st.markdown("### 🗓️ Histórico Longitudinal de Evoluções")
+            if not historico.empty:
+                for _, row in historico.iloc[::-1].iterrows(): # Mais recente primeiro
+                    with st.expander(f"📅 Consulta em {row['Data Da Consulta']} - {row['Tipo De Retorno (Mês)']}", expanded=True):
+                        col_a, col_b = st.columns(2)
+                        col_a.write(f"**Relato Clínico:**\n{row['Relato Clínico']}")
+                        col_b.write(f"**Conduta:**\n{row['Conduta']}")
+                        st.caption(f"Peso: {row['Peso Corporal (kg)']}kg | Situação na data: {row['Nova Situação']}")
+            else:
+                st.warning(f"⚠️ Nenhuma evolução encontrada para o ID {chave_paciente} ou Nome {paciente}.")
+
+    with tab2: st.dataframe(df_p)
+    with tab3: st.dataframe(df_e)
+
+# Barra lateral
+with st.sidebar:
+    if st.button("🔄 Forçar Atualização"):
+        st.cache_data.clear()
+        st.rerun()
