@@ -2,37 +2,30 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import os
+from datetime import datetime
+from fpdf import FPDF
 
 # ==========================================
 # 1. CONFIGURAÇÕES INICIAIS DA PÁGINA
 # ==========================================
 st.set_page_config(page_title="Prontuário Eletrônico ILTB", layout="wide")
 
-# 👇 COLE A SUA URL DO GOOGLE AQUI (Entre as aspas) 👇
-URL_GOOGLE = "https://script.google.com/macros/s/AKfycbwaQrmEhaZ65W7Nw9NrsdaMPiMsE2qnKoKIi2lquxnGT6-cBTeAp5XW8Gk7QsyNuBkW/exec"
+# 👇 COLE A SUA URL DO GOOGLE AQUI 👇
+URL_GOOGLE = "COLE_AQUI_A_SUA_URL_TERMINADA_EM_/exec"
 
 st.title("🩺 Prontuário Eletrônico - Gestão ILTB")
 
 # ==========================================
 # 2. FUNÇÃO ROBUSTA PARA BUSCAR DADOS
 # ==========================================
-@st.cache_data(ttl=10) # Guarda os dados por 10 segundos
+@st.cache_data(ttl=10)
 def buscar_dados():
     url_python = f"{URL_GOOGLE}?read=true"
     try:
-        # Aumentamos o timeout para dar tempo ao Google de processar a planilha
         resposta = requests.get(url_python, timeout=20)
-        
-        # Lê o texto bruto e converte para JSON de forma segura, ignorando cabeçalhos do servidor
         texto_puro = resposta.text.strip()
-        dados = json.loads(texto_puro)
-        return dados
-        
-    except json.JSONDecodeError:
-        st.error("Falha ao converter os dados. A resposta do Google não pôde ser lida como JSON.")
-        with st.expander("Ver resposta bruta do servidor para depuração"):
-            st.code(texto_puro)
-        return None
+        return json.loads(texto_puro)
     except Exception as e:
         st.error(f"Erro de comunicação com o servidor: {e}")
         return None
@@ -40,7 +33,6 @@ def buscar_dados():
 # ==========================================
 # 3. INTERFACE PRINCIPAL E LÓGICA DO PAINEL
 # ==========================================
-# Botão para limpar a memória e atualizar a tela com novos cadastros
 if st.button("🔄 Atualizar Base de Dados"):
     st.cache_data.clear()
     st.rerun()
@@ -48,14 +40,12 @@ if st.button("🔄 Atualizar Base de Dados"):
 dados_brutos = buscar_dados()
 
 if dados_brutos:
-    # Converte os dados JSON em tabelas de dados dinâmicas (DataFrames Pandas)
     df_pacientes = pd.DataFrame(dados_brutos.get("pacientes", []))
     df_evolucoes = pd.DataFrame(dados_brutos.get("evolucoes", []))
 
     st.sidebar.header("🔍 Busca de Paciente")
     
     if not df_pacientes.empty:
-        # Cria uma coluna virtual combinando Nome e CPF para facilitar a pesquisa visual
         df_pacientes["Busca"] = df_pacientes["Nome Do Paciente"].astype(str) + " - " + df_pacientes["Cns_Cpf (Id)"].astype(str)
         paciente_selecionado = st.sidebar.selectbox("Selecione o paciente:", df_pacientes["Busca"].tolist())
 
@@ -65,11 +55,9 @@ if dados_brutos:
         if paciente_selecionado:
             st.divider()
             
-            # Filtra os dados apenas do paciente que foi selecionado na barra lateral
             dados_paciente = df_pacientes[df_pacientes["Busca"] == paciente_selecionado].iloc[0]
             id_paciente = dados_paciente["Cns_Cpf (Id)"]
 
-            # Exibe o Cabeçalho de Identificação do Paciente
             st.subheader(f"👤 Paciente: {dados_paciente['Nome Do Paciente']}")
             
             col1, col2, col3 = st.columns(3)
@@ -86,42 +74,104 @@ if dados_brutos:
             st.divider()
 
             # ==========================================
-            # 5. LINHA DO TEMPO: EVOLUÇÕES CLÍNICAS
+            # 5. LINHA DO TEMPO E EXPORTAÇÃO
             # ==========================================
             st.subheader("📝 Histórico Clínico")
             
-            # Garante que a tabela de evoluções tem dados e o campo do ID existe para cruzamento
+            evolucoes_limpas = pd.DataFrame() # Tabela vazia como segurança
+            
             if not df_evolucoes.empty and "Cns_Cpf (Id)" in df_evolucoes.columns:
                 evolucoes_paciente = df_evolucoes[df_evolucoes["Cns_Cpf (Id)"] == id_paciente].copy()
                 
                 if not evolucoes_paciente.empty:
-                    # Mapeia as colunas de data baseadas no seu banco de dados real
                     colunas_data = ["Carimbo De Tempo", "Data Da Consulta", "Próxima Consulta"]
                     
-                    # Converte texto em data real para o Python conseguir ordenar cronologicamente
                     for col in colunas_data:
                         if col in evolucoes_paciente.columns:
                             evolucoes_paciente[col] = pd.to_datetime(evolucoes_paciente[col], errors='coerce', dayfirst=True)
                     
-                    # Ordena o prontuário: a consulta mais recente aparece primeiro no topo
                     if "Data Da Consulta" in evolucoes_paciente.columns:
                         evolucoes_paciente = evolucoes_paciente.sort_values(by="Data Da Consulta", ascending=False)
                     
-                    # Reaplica a máscara visual DD/MM/YYYY estrita e substitui datas vazias por '-'
                     for col in colunas_data:
                         if col in evolucoes_paciente.columns:
+                            # Aplica máscara DD/MM/YYYY estrita
                             evolucoes_paciente[col] = evolucoes_paciente[col].dt.strftime('%d/%m/%Y').fillna('-')
 
-                    # Remove a coluna do CPF/CNS da tabela para não poluir a tela, já que o cabeçalho já mostra
                     if "Cns_Cpf (Id)" in evolucoes_paciente.columns:
-                        evolucoes_paciente = evolucoes_paciente.drop(columns=["Cns_Cpf (Id)"])
+                        evolucoes_limpas = evolucoes_paciente.drop(columns=["Cns_Cpf (Id)"])
 
-                    # Renderiza a tabela limpa
-                    st.dataframe(evolucoes_paciente, use_container_width=True, hide_index=True)
+                    st.dataframe(evolucoes_limpas, use_container_width=True, hide_index=True)
                 else:
                     st.info("Nenhuma evolução registrada para este paciente até o momento.")
             else:
-                st.warning("Aba de evoluções vazia ou sem a coluna 'Cns_Cpf (Id)' de ligação.")
+                st.warning("Aba de evoluções vazia ou sem a coluna 'Cns_Cpf (Id)'.")
+
+            # ==========================================
+            # 6. MÓDULO DE GERAÇÃO DE PDF
+            # ==========================================
+            st.write("") # Espaçamento
+            if st.button("📄 Exportar Prontuário em PDF"):
+                
+                # Regra: Salvar na pasta Relatorio_TR
+                pasta_destino = "Relatorio_TR"
+                if not os.path.exists(pasta_destino):
+                    os.makedirs(pasta_destino)
+                
+                # Inicializa o motor de PDF
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", size=12)
+                
+                # Título Principal
+                pdf.set_font("Arial", 'B', 16)
+                pdf.cell(200, 10, txt="Prontuario Eletronico - ILTB", ln=True, align='C')
+                pdf.ln(5)
+                
+                # Data de emissão com máscara DD/MM/YYYY
+                data_emissao = datetime.now().strftime("%d/%m/%Y")
+                pdf.set_font("Arial", 'I', 10)
+                pdf.cell(200, 10, txt=f"Data de Emissao: {data_emissao}", ln=True, align='R')
+                
+                # Dados do Paciente
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(200, 8, txt=f"Paciente: {dados_paciente['Nome Do Paciente']}", ln=True)
+                pdf.set_font("Arial", size=11)
+                pdf.cell(200, 6, txt=f"ID (CNS/CPF): {id_paciente}", ln=True)
+                pdf.cell(200, 6, txt=f"Unidade de Tratamento: {dados_paciente.get('Unidade De Tratamento', '-')}", ln=True)
+                pdf.cell(200, 6, txt=f"Situacao Atual: {dados_paciente.get('Situação Atual', '-')}", ln=True)
+                pdf.ln(5)
+                
+                # Cabeçalho das evoluções
+                pdf.set_font("Arial", 'B', 14)
+                pdf.cell(200, 10, txt="Historico de Evolucoes Clinicas", ln=True)
+                pdf.ln(2)
+                
+                # Loop para escrever as evoluções no PDF
+                pdf.set_font("Arial", size=10)
+                if not evolucoes_limpas.empty:
+                    for index, row in evolucoes_limpas.iterrows():
+                        # Tratamento para evitar erro com caracteres especiais no FPDF básico
+                        dt_consulta = str(row.get('Data Da Consulta', '-')).encode('latin-1', 'replace').decode('latin-1')
+                        situacao = str(row.get('Nova Situação', '-')).encode('latin-1', 'replace').decode('latin-1')
+                        relato = str(row.get('Relato Clínico', '-')).encode('latin-1', 'replace').decode('latin-1')
+                        conduta = str(row.get('Conduta', '-')).encode('latin-1', 'replace').decode('latin-1')
+                        
+                        pdf.set_font("Arial", 'B', 10)
+                        pdf.cell(200, 6, txt=f"Data da Consulta: {dt_consulta} | Situacao: {situacao}", ln=True)
+                        
+                        pdf.set_font("Arial", size=10)
+                        pdf.multi_cell(0, 6, txt=f"Relato: {relato}")
+                        pdf.multi_cell(0, 6, txt=f"Conduta: {conduta}")
+                        pdf.ln(3) # Espaço entre evoluções
+                else:
+                    pdf.cell(200, 10, txt="Nenhum atendimento registrado no historico.", ln=True)
+                
+                # Finaliza e salva o arquivo
+                caminho_arquivo = f"{pasta_destino}/Prontuario_{id_paciente}.pdf"
+                pdf.output(caminho_arquivo)
+                
+                st.success(f"✅ PDF gerado com sucesso! Arquivo salvo na pasta local: **{caminho_arquivo}**")
 
     else:
         st.warning("Nenhum paciente cadastrado na base de dados do Google Planilhas.")
