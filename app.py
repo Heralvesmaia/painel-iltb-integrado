@@ -9,7 +9,7 @@ import json
 st.set_page_config(page_title="Prontuário Eletrônico ILTB", layout="wide")
 
 # 👇 COLE A SUA URL DO GOOGLE AQUI (Entre as aspas) 👇
-URL_GOOGLE = "COLE_AQUI_A_SUA_URL_TERMINADA_EM_/exec"
+URL_GOOGLE = "https://script.google.com/macros/s/AKfycbwaQrmEhaZ65W7Nw9NrsdaMPiMsE2qnKoKIi2lquxnGT6-cBTeAp5XW8Gk7QsyNuBkW/exec"
 
 st.title("🩺 Prontuário Eletrônico - Gestão ILTB")
 
