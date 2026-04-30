@@ -6,7 +6,7 @@ import requests
 st.set_page_config(page_title="Gestão ILTB", layout="wide")
 
 # 2. AQUI ESTÁ A CORREÇÃO: Sua URL real do Google Apps Script
-URL_GOOGLE = "https://script.google.com/macros/s/AKfycbx_k0M-OK6sSjralFSjOTyGojh7noWZZ35Og6ce-puvFSSjUUILU55ZmvuAz5Sx4pn9bQ/exec"
+URL_GOOGLE = "https://script.google.com/macros/s/AKfycbwJIGdxw5P0xxjsyCTKbqgbhoghJNCAyrGAPHIlT33GKbRTYc6iTTIM_HEofIYuUuXyLA/exec"
 
 st.title("📊 Painel de Monitoramento ILTB em Tempo Real")
 
