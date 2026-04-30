@@ -2,37 +2,44 @@ import streamlit as st
 import pandas as pd
 import requests
 
-# Documentação: Configuração básica da página do painel
+# 1. Configuração básica da página do painel
 st.set_page_config(page_title="Gestão ILTB", layout="wide")
 
-# COLE AQUI A NOVA URL GERADA NO PASSO ANTERIOR DO GOOGLE
-URL_GOOGLE = "COLE_SUA_URL_AQUI"
+# 2. AQUI ESTÁ A CORREÇÃO: Sua URL real do Google Apps Script
+URL_GOOGLE = "https://script.google.com/macros/s/AKfycbx_k0M-OK6sSjralFSjOTyGojh7noWZZ35Og6ce-puvFSSjUUILU55ZmvuAz5Sx4pn9bQ/exec"
 
 st.title("📊 Painel de Monitoramento ILTB em Tempo Real")
 
-# Botão para atualizar os dados
+# 3. Botão para atualizar os dados
 if st.button("🔄 Buscar Dados no Servidor"):
     try:
-        # A Mágica: Colocamos o "?read=true" no final da URL para pedir os dados ao porteiro
+        # A Mágica: Colocamos o "?read=true" no final da URL para pedir os dados ao Google
         url_python = f"{URL_GOOGLE}?read=true"
         
         # O Python bate na porta do Google
-        resposta = requests.get(url_python)
+        resposta = requests.get(url_python, timeout=15)
         
         # Se o Google respondeu com sucesso (código 200 significa OK)
         if resposta.status_code == 200:
-            # Transforma o pacote JSON em uma tabela visível (DataFrame)
-            dados = resposta.json()
-            df = pd.DataFrame(dados)
-            
-            st.success(f"Conexão estabelecida! {len(df)} pacientes carregados.")
-            
-            # Mostra a tabela na tela
-            st.dataframe(df, use_container_width=True)
-            
+            try:
+                # Transforma o pacote JSON em uma tabela visível (DataFrame)
+                dados = resposta.json()
+                df = pd.DataFrame(dados)
+                
+                # Exibe uma mensagem de sucesso
+                st.success(f"Conexão estabelecida! {len(df)} pacientes carregados.")
+                
+                # Mostra a tabela na tela do Streamlit
+                st.dataframe(df, use_container_width=True)
+                
+            except Exception:
+                st.error("O Google enviou uma resposta, mas não no formato esperado (JSON). Verifique as permissões de 'Qualquer pessoa' no Apps Script.")
+                with st.expander("Ver resposta bruta do servidor"):
+                    st.code(resposta.text)
+                    
         else:
-            st.error("Erro ao comunicar com o Google. O link pode estar restrito.")
+            st.error(f"Erro ao comunicar com o Google. Status do servidor: {resposta.status_code}")
             
     except Exception as e:
-        # Método Educativo: Se falhar, mostramos o erro exato na tela para investigarmos
+        # Método Educativo: Se a internet falhar ou a URL estiver errada, mostramos o erro aqui
         st.error(f"Falha técnica na conexão: {e}")
