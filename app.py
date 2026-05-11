@@ -78,7 +78,7 @@ if dados_brutos:
             # ==========================================
             # 5. LINHA DO TEMPO E EXPORTAÇÃO
             # ==========================================
-            st.subheader("📝 Histórico Clínico")
+            st.subheader("📝 Histórico Clínico") 
             
             evolucoes_limpas = pd.DataFrame() 
             
