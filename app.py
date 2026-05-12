@@ -71,7 +71,7 @@ if dados_brutos:
                 st.write(f"**Situação Atual:** {dados_paciente.get('Situação Atual', 'N/A')}")
                 st.write(f"**Início TPT:** {dados_paciente.get('Início Tpt', 'N/A')}")
                 # 👇 AQUI ESTÁ A CORREÇÃO: Exibindo o Término Estimado na tela 👇
-                st.write(f"**Término Previsto:** {dados_paciente.get('Término Estimado', 'N/A')}")
+                st.write(f"**Término Previsto:** {dados_paciente.get('Término Previsto', 'N/A')}")
 
             st.divider()
 
@@ -138,7 +138,7 @@ if dados_brutos:
             
             # 👇 AQUI ESTÁ A CORREÇÃO: Incluímos o Início e o Término Previsto no PDF 👇
             inicio_tpt = dados_paciente.get('Início Tpt', '-')
-            termino_previsto = dados_paciente.get('Término Estimado', '-')
+            termino_previsto = dados_paciente.get('Término Previsto', '-')
             pdf.cell(200, 6, txt=f"Inicio TPT: {inicio_tpt} | Termino Previsto: {termino_previsto}", ln=True)
             pdf.ln(5)
             
