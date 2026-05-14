@@ -39,56 +39,63 @@ def verificar_login():
 verificar_login()
 
 # ==========================================
-# FUNÇÃO GERADORA DE PDF (PRONTUÁRIO)
+# FUNÇÃO GERADORA DE PDF BLINDADA (190mm)
 # ==========================================
 def gerar_pdf_prontuario(paciente, evolucoes):
     pdf = FPDF()
     pdf.add_page()
     
-    # Função para evitar erro com acentuação no PDF
     def formatar_texto(texto):
         return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
     # Cabeçalho do PDF
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, formatar_texto('SIG-ILTB NOVA IGUAÇU - PRONTUÁRIO LONGITUDINAL'), 0, 1, 'C')
+    pdf.cell(w=190, h=10, txt=formatar_texto('SIG-ILTB NOVA IGUAÇU - PRONTUÁRIO LONGITUDINAL'), border=0, ln=1, align='C')
     pdf.ln(5)
 
     # Dados do Paciente
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, formatar_texto(f"PACIENTE: {paciente.get('Nome de Registro', 'Não informado')}"), 0, 1)
+    pdf.cell(w=190, h=8, txt=formatar_texto(f"PACIENTE: {paciente.get('Nome de Registro', 'Não informado')}"), border=0, ln=1)
     
     pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 6, formatar_texto(f"ID (CNS/CPF): {paciente.get('Cns_Cpf (Id)', '-')}    Idade: {paciente.get('Idade', '-')}    Sexo: {paciente.get('Sexo', '-')}"), 0, 1)
-    pdf.cell(0, 6, formatar_texto(f"Unidade de Acompanhamento: {paciente.get('Unidade de Saúde', '-')}"), 0, 1)
-    pdf.cell(0, 6, formatar_texto(f"Data de Início TPT: {paciente.get('Data Início TPT', '-')}    Término Previsto: {paciente.get('Término Previsto', '-')}"), 0, 1)
-    pdf.cell(0, 6, formatar_texto(f"Esquema: {paciente.get('Medicamento', '-')} - {paciente.get('Posologia', '-')}"), 0, 1)
-    pdf.cell(0, 6, formatar_texto(f"Situação Atual: {paciente.get('Situação Atual', '-')}"), 0, 1)
+    pdf.cell(w=190, h=6, txt=formatar_texto(f"ID (CNS/CPF): {paciente.get('Cns_Cpf (Id)', '-')}    Idade: {paciente.get('Idade', '-')}    Sexo: {paciente.get('Sexo', '-')}"), border=0, ln=1)
+    pdf.cell(w=190, h=6, txt=formatar_texto(f"Unidade: {paciente.get('Unidade de Saúde', '-')}"), border=0, ln=1)
+    pdf.cell(w=190, h=6, txt=formatar_texto(f"Início TPT: {paciente.get('Data Início TPT', '-')}    Término Previsto: {paciente.get('Término Previsto', '-')}"), border=0, ln=1)
+    pdf.cell(w=190, h=6, txt=formatar_texto(f"Esquema: {paciente.get('Medicamento', '-')} - {paciente.get('Posologia', '-')}"), border=0, ln=1)
+    pdf.cell(w=190, h=6, txt=formatar_texto(f"Situação Atual: {paciente.get('Situação Atual', '-')}"), border=0, ln=1)
     
     pdf.line(10, pdf.get_y() + 2, 200, pdf.get_y() + 2)
     pdf.ln(8)
 
-    # Evoluções
+    # Evoluções (Com trava geométrica de 190mm de largura)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, formatar_texto("HISTÓRICO DE EVOLUÇÕES CLÍNICAS"), 0, 1)
+    pdf.cell(w=190, h=10, txt=formatar_texto("HISTÓRICO DE EVOLUÇÕES CLÍNICAS"), border=0, ln=1)
     
     if evolucoes.empty:
         pdf.set_font("Arial", 'I', 10)
-        pdf.cell(0, 8, formatar_texto("Nenhuma evolução registrada para este paciente até o momento."), 0, 1)
+        pdf.cell(w=190, h=8, txt=formatar_texto("Nenhuma evolução registrada para este paciente até o momento."), border=0, ln=1)
     else:
         for idx, evo in evolucoes.iterrows():
             pdf.set_font("Arial", 'B', 10)
-            pdf.cell(0, 6, formatar_texto(f"Data: {evo.get('Data Da Consulta', '-')} | Situação: {evo.get('Nova Situação', '-')} | Peso: {evo.get('Peso Corporal (kg)', '-')} kg"), 0, 1)
+            pdf.cell(w=190, h=6, txt=formatar_texto(f"Data: {evo.get('Data Da Consulta', '-')} | Situação: {evo.get('Nova Situação', '-')} | Peso: {evo.get('Peso Corporal (kg)', '-')} kg"), border=0, ln=1)
             
             pdf.set_font("Arial", '', 10)
-            pdf.multi_cell(0, 6, formatar_texto(f"Relato Clínico: {evo.get('Relato Clínico', '-')}"))
-            pdf.multi_cell(0, 6, formatar_texto(f"Conduta: {evo.get('Conduta', '-')}"))
-            pdf.cell(0, 6, formatar_texto(f"Próxima Consulta Agendada: {evo.get('Próxima Consulta', '-')}"), 0, 1)
+            # Travando o Cursor e limitando a área de texto a 190mm
+            pdf.set_x(10)
+            pdf.multi_cell(w=190, h=6, txt=formatar_texto(f"Relato Clínico: {evo.get('Relato Clínico', '-')}"))
+            pdf.set_x(10)
+            pdf.multi_cell(w=190, h=6, txt=formatar_texto(f"Conduta: {evo.get('Conduta', '-')}"))
+            
+            pdf.cell(w=190, h=6, txt=formatar_texto(f"Próxima Consulta Agendada: {evo.get('Próxima Consulta', '-')}"), border=0, ln=1)
             pdf.ln(3)
             pdf.line(10, pdf.get_y(), 200, pdf.get_y())
             pdf.ln(3)
 
-    return pdf.output(dest='S').encode('latin-1')
+    # Compatibilidade Universal para fpdf e fpdf2
+    try:
+        return bytes(pdf.output()) 
+    except TypeError:
+        return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
 # 1. CONEXÃO COM O BANCO DE DADOS (GOOGLE)
@@ -121,8 +128,6 @@ df_pacientes, df_evolucoes = carregar_dados()
 # ==========================================
 if df_pacientes.empty:
     st.warning("Nenhum paciente cadastrado ou aguardando sincronização com o banco de dados.")
-    
-    # Botão de atualizar caso esteja vazio
     if st.button("🔄 Sincronizar Agora"):
         st.cache_data.clear()
         st.rerun()
@@ -150,7 +155,6 @@ else:
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg/1200px-Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg.png", width=150)
 st.sidebar.title("Bem-vindo, Administrador!")
 
-# BOTÃO DE ATUALIZAR MANUALMENTE
 if st.sidebar.button("🔄 Sincronizar Agora", type="primary"):
     st.cache_data.clear()
     st.rerun()
@@ -239,18 +243,17 @@ with aba1:
                 evos_paciente = df_evolucoes[df_evolucoes[col_id_evo] == str(paciente_id)]
                 
                 if not evos_paciente.empty:
-                    # Inverte para mostrar as mais recentes primeiro
                     evos_paciente = evos_paciente.iloc[::-1]
                     colunas_mostrar = [col for col in ["Data Da Consulta", "Peso Corporal (kg)", "Nova Situação", "Relato Clínico", "Conduta", "Próxima Consulta"] if col in evos_paciente.columns]
                     
                     if colunas_mostrar:
-                        st.dataframe(evos_paciente[colunas_mostrar], hide_index=True)
+                        col_evo1.dataframe(evos_paciente[colunas_mostrar], hide_index=True)
                     else:
-                        st.dataframe(evos_paciente, hide_index=True)
+                        col_evo1.dataframe(evos_paciente, hide_index=True)
                 else:
-                    st.write("Nenhuma evolução registrada para este paciente.")
+                    col_evo1.write("Nenhuma evolução registrada para este paciente.")
         else:
-            st.write("Aba de evoluções ainda não sincronizada.")
+            col_evo1.write("Aba de evoluções ainda não sincronizada.")
             
         # BOTÃO GERAR PDF
         with col_evo2:
@@ -258,7 +261,7 @@ with aba1:
             nome_arquivo = f"Prontuario_{str(paciente_id).replace('.', '').replace('-', '')}.pdf"
             
             st.download_button(
-                label="📄 Baixar PDF do Prontuário",
+                label="📄 Baixar PDF",
                 data=pdf_bytes,
                 file_name=nome_arquivo,
                 mime="application/pdf",
