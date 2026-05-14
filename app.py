@@ -12,7 +12,7 @@ st.set_page_config(page_title="Gestão ILTB - Nova Iguaçu", page_icon="🩺", l
 # 1. CONEXÃO COM O BANCO DE DADOS (GOOGLE)
 # ==========================================
 # ⚠️ ATENÇÃO: Cole a sua URL real do Google Apps Script (terminada em /exec) abaixo:
-API_URL = "COLE_SUA_URL_AQUI_TERMINADA_EM_/EXEC"
+API_URL = "https://script.google.com/macros/s/AKfycbyTyHorAMicNY7lNO6cVWG-pyAe03pTR8obS3NGOGDlZxXY-eS5Jt2O9Y4gzxtGW-a3rg/exec"
 
 @st.cache_data(ttl=60) # Atualiza os dados a cada 60 segundos
 def carregar_dados():
