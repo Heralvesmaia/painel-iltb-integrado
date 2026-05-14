@@ -4,13 +4,47 @@ import requests
 import plotly.express as px
 
 # ==========================================
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO DA PÁGINA (Sempre a 1ª linha)
 # ==========================================
 st.set_page_config(page_title="Gestão ILTB - Nova Iguaçu", page_icon="🩺", layout="wide")
 
 # ==========================================
+# 0. TELA DE LOGIN (SEGURANÇA)
+# ==========================================
+def verificar_login():
+    if "autenticado" not in st.session_state:
+        st.session_state["autenticado"] = False
+
+    if not st.session_state["autenticado"]:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg/1200px-Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg.png", width=100)
+            st.title("🔒 Acesso Restrito")
+            st.write("Painel Gerencial SIG-ILTB")
+            
+            with st.form("login_form"):
+                usuario = st.text_input("Usuário")
+                senha = st.text_input("Senha", type="password")
+                submit = st.form_submit_button("Entrar no Sistema")
+                
+                if submit:
+                    # ⚠️ COLOQUE A SUA SENHA REAL AQUI EMBAIXO
+                    if usuario == "heraldo_admin" and senha == "123456": 
+                        st.session_state["autenticado"] = True
+                        st.rerun() # Atualiza a tela para sumir o login e abrir o painel
+                    else:
+                        st.error("❌ Usuário ou senha incorretos. Tente novamente.")
+        
+        # O comando abaixo impede que o resto do código rode se não estiver logado
+        st.stop() 
+
+# Chama a tranca do sistema!
+verificar_login()
+
+# ==========================================
 # 1. CONEXÃO COM O BANCO DE DADOS (GOOGLE)
 # ==========================================
+# ⚠️ ATENÇÃO: Cole a sua URL real do Google Apps Script (terminada em /exec) abaixo:
 API_URL = "https://script.google.com/macros/s/AKfycbyTyHorAMicNY7lNO6cVWG-pyAe03pTR8obS3NGOGDlZxXY-eS5Jt2O9Y4gzxtGW-a3rg/exec"
 
 @st.cache_data(ttl=60) # Atualiza os dados a cada 60 segundos
@@ -53,7 +87,7 @@ else:
     df_pacientes["Cns_Cpf_Temp"] = "S/N"
     coluna_id = "Cns_Cpf_Temp"
 
-# Buscar a coluna do Nome do Paciente (aceita os dois nomes)
+# Buscar a coluna do Nome do Paciente
 coluna_nome = "Nome de Registro" if "Nome de Registro" in df_pacientes.columns else "Nome Do Paciente" if "Nome Do Paciente" in df_pacientes.columns else None
 
 if coluna_nome:
@@ -66,7 +100,15 @@ else:
 # 3. INTERFACE LATERAL (FILTROS)
 # ==========================================
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg/1200px-Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg.png", width=150)
-st.sidebar.title("Filtros Gerenciais")
+st.sidebar.title("Bem-vindo, Administrador!")
+
+# Botão de Sair (Logout)
+if st.sidebar.button("🚪 Sair do Sistema"):
+    st.session_state["autenticado"] = False
+    st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Filtros Gerenciais")
 
 if "Unidade de Saúde" in df_pacientes.columns:
     unidades_disponiveis = ["Todas"] + sorted(df_pacientes["Unidade de Saúde"].dropna().unique().tolist())
