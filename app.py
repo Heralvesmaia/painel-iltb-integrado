@@ -1,184 +1,193 @@
 import streamlit as st
 import pandas as pd
 import requests
-import json
-import os
-from datetime import datetime
-from fpdf import FPDF
+import plotly.express as px
 
 # ==========================================
-# 1. CONFIGURAÇÕES INICIAIS DA PÁGINA
+# CONFIGURAÇÃO DA PÁGINA
 # ==========================================
-st.set_page_config(page_title="Prontuário Eletrônico ILTB", layout="wide")
-
-# 👇 A sua URL oficial já está configurada aqui! 👇
-URL_GOOGLE = "https://script.google.com/macros/s/AKfycbwaQrmEhaZ65W7Nw9NrsdaMPiMsE2qnKoKIi2lquxnGT6-cBTeAp5XW8Gk7QsyNuBkW/exec"
-
-st.title("🩺 Prontuário Eletrônico - Gestão ILTB")
+st.set_page_config(page_title="Gestão ILTB - Nova Iguaçu", page_icon="🩺", layout="wide")
 
 # ==========================================
-# 2. FUNÇÃO ROBUSTA PARA BUSCAR DADOS
+# 1. CONEXÃO COM O BANCO DE DADOS (GOOGLE)
 # ==========================================
-@st.cache_data(ttl=10)
-def buscar_dados():
-    url_python = f"{URL_GOOGLE}?read=true"
+# ⚠️ ATENÇÃO: Cole a sua URL real do Google Apps Script (terminada em /exec) abaixo:
+API_URL = "COLE_SUA_URL_AQUI_TERMINADA_EM_/EXEC"
+
+@st.cache_data(ttl=60) # Atualiza os dados a cada 60 segundos
+def carregar_dados():
     try:
-        resposta = requests.get(url_python, timeout=20)
-        texto_puro = resposta.text.strip()
-        return json.loads(texto_puro)
+        response = requests.get(f"{API_URL}?read=true")
+        if response.status_code == 200:
+            dados = response.json()
+            df_pacientes = pd.DataFrame(dados.get("pacientes", []))
+            df_evolucoes = pd.DataFrame(dados.get("evolucoes", []))
+            return df_pacientes, df_evolucoes
+        else:
+            st.error("Erro ao conectar com o Google Sheets. Verifique a URL.")
+            return pd.DataFrame(), pd.DataFrame()
     except Exception as e:
-        st.error(f"Erro de comunicação com o servidor: {e}")
-        return None
+        st.error(f"Falha na conexão: {e}")
+        return pd.DataFrame(), pd.DataFrame()
+
+# Carregando os dados da nuvem
+df_pacientes, df_evolucoes = carregar_dados()
 
 # ==========================================
-# 3. INTERFACE PRINCIPAL E LÓGICA DO PAINEL
+# 2. VERIFICAÇÃO DE SEGURANÇA E LIMPEZA
 # ==========================================
-if st.button("🔄 Atualizar Base de Dados"):
-    st.cache_data.clear()
-    st.rerun()
+if df_pacientes.empty:
+    st.warning("Nenhum paciente cadastrado ou aguardando sincronização com o banco de dados.")
+    st.stop()
 
-dados_brutos = buscar_dados()
-
-if dados_brutos:
-    df_pacientes = pd.DataFrame(dados_brutos.get("pacientes", []))
-    df_evolucoes = pd.DataFrame(dados_brutos.get("evolucoes", []))
-
-    st.sidebar.header("🔍 Busca de Paciente")
-    
-    if not df_pacientes.empty:
-        df_pacientes["Busca"] = df_pacientes["Nome Do Paciente"].astype(str) + " - " + df_pacientes["Cns_Cpf (Id)"].astype(str)
-        paciente_selecionado = st.sidebar.selectbox("Selecione o paciente:", df_pacientes["Busca"].tolist())
-
-        # ==========================================
-        # 4. EXIBIÇÃO DO PRONTUÁRIO LONGITUDINAL
-        # ==========================================
-        if paciente_selecionado:
-            st.divider()
-            
-            dados_paciente = df_pacientes[df_pacientes["Busca"] == paciente_selecionado].iloc[0]
-            id_paciente = dados_paciente["Cns_Cpf (Id)"]
-
-            st.subheader(f"👤 Paciente: {dados_paciente['Nome Do Paciente']}")
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.write(f"**ID (CNS/CPF):** {id_paciente}")
-                st.write(f"**Idade:** {dados_paciente.get('Idade', 'N/A')}")
-            with col2:
-                st.write(f"**Data de Nascimento:** {dados_paciente.get('Data De Nascimento', 'N/A')}")
-                st.write(f"**Unidade:** {dados_paciente.get('Unidade De Tratamento', 'N/A')}")
-            with col3:
-                st.write(f"**Situação Atual:** {dados_paciente.get('Situação Atual', 'N/A')}")
-                st.write(f"**Início TPT:** {dados_paciente.get('Início Tpt', 'N/A')}")
-                # 👇 AQUI ESTÁ A CORREÇÃO: Exibindo o Término Estimado na tela 👇
-                st.write(f"**Término Previsto:** {dados_paciente.get('Término Previsto', 'N/A')}")
-
-            st.divider()
-
-            # ==========================================
-            # 5. LINHA DO TEMPO E EXPORTAÇÃO
-            # ==========================================
-            st.subheader("📝 Histórico Clínico") 
-            
-            evolucoes_limpas = pd.DataFrame() 
-            
-            if not df_evolucoes.empty and "Cns_Cpf (Id)" in df_evolucoes.columns:
-                evolucoes_paciente = df_evolucoes[df_evolucoes["Cns_Cpf (Id)"] == id_paciente].copy()
-                
-                if not evolucoes_paciente.empty:
-                    colunas_data = ["Carimbo De Tempo", "Data Da Consulta", "Próxima Consulta"]
-                    
-                    for col in colunas_data:
-                        if col in evolucoes_paciente.columns:
-                            evolucoes_paciente[col] = pd.to_datetime(evolucoes_paciente[col], errors='coerce', dayfirst=True)
-                    
-                    if "Data Da Consulta" in evolucoes_paciente.columns:
-                        evolucoes_paciente = evolucoes_paciente.sort_values(by="Data Da Consulta", ascending=False)
-                    
-                    for col in colunas_data:
-                        if col in evolucoes_paciente.columns:
-                            evolucoes_paciente[col] = evolucoes_paciente[col].dt.strftime('%d/%m/%Y').fillna('-')
-
-                    if "Cns_Cpf (Id)" in evolucoes_paciente.columns:
-                        evolucoes_limpas = evolucoes_paciente.drop(columns=["Cns_Cpf (Id)"])
-
-                    st.dataframe(evolucoes_limpas, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Nenhuma evolução registrada para este paciente até o momento.")
-            else:
-                st.warning("Aba de evoluções vazia ou sem a coluna 'Cns_Cpf (Id)'.")
-
-            # ==========================================
-            # 6. MÓDULO DE GERAÇÃO E DOWNLOAD DE PDF
-            # ==========================================
-            st.write("") 
-            st.subheader("📄 Exportar Prontuário")
-            st.write("O arquivo PDF é gerado automaticamente baseando-se no histórico acima.")
-            
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            
-            # Título Principal
-            pdf.set_font("Arial", 'B', 16)
-            pdf.cell(200, 10, txt="Prontuario Eletronico - ILTB", ln=True, align='C')
-            pdf.ln(5)
-            
-            data_emissao = datetime.now().strftime("%d/%m/%Y")
-            pdf.set_font("Arial", 'I', 10)
-            pdf.cell(200, 10, txt=f"Data de Emissao: {data_emissao}", ln=True, align='R')
-            
-            # Dados do Paciente no PDF
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(200, 8, txt=f"Paciente: {dados_paciente['Nome Do Paciente']}", ln=True)
-            pdf.set_font("Arial", size=11)
-            pdf.cell(200, 6, txt=f"ID (CNS/CPF): {id_paciente}", ln=True)
-            pdf.cell(200, 6, txt=f"Unidade de Tratamento: {dados_paciente.get('Unidade De Tratamento', '-')}", ln=True)
-            pdf.cell(200, 6, txt=f"Situacao Atual: {dados_paciente.get('Situação Atual', '-')}", ln=True)
-            
-            # 👇 AQUI ESTÁ A CORREÇÃO: Incluímos o Início e o Término Previsto no PDF 👇
-            inicio_tpt = dados_paciente.get('Início Tpt', '-')
-            termino_previsto = dados_paciente.get('Término Previsto', '-')
-            pdf.cell(200, 6, txt=f"Inicio TPT: {inicio_tpt} | Termino Previsto: {termino_previsto}", ln=True)
-            pdf.ln(5)
-            
-            # Cabeçalho das evoluções
-            pdf.set_font("Arial", 'B', 14)
-            pdf.cell(200, 10, txt="Historico de Evolucoes Clinicas", ln=True)
-            pdf.ln(2)
-            
-            pdf.set_font("Arial", size=10)
-            if not evolucoes_limpas.empty:
-                for index, row in evolucoes_limpas.iterrows():
-                    dt_consulta = str(row.get('Data Da Consulta', '-')).encode('latin-1', 'replace').decode('latin-1')
-                    situacao = str(row.get('Nova Situação', '-')).encode('latin-1', 'replace').decode('latin-1')
-                    relato = str(row.get('Relato Clínico', '-')).encode('latin-1', 'replace').decode('latin-1')
-                    conduta = str(row.get('Conduta', '-')).encode('latin-1', 'replace').decode('latin-1')
-                    
-                    pdf.set_font("Arial", 'B', 10)
-                    pdf.cell(200, 6, txt=f"Data da Consulta: {dt_consulta} | Situacao: {situacao}", ln=True)
-                    
-                    pdf.set_font("Arial", size=10)
-                    pdf.multi_cell(0, 6, txt=f"Relato: {relato}")
-                    pdf.multi_cell(0, 6, txt=f"Conduta: {conduta}")
-                    pdf.ln(3) 
-            else:
-                pdf.cell(200, 10, txt="Nenhum atendimento registrado no historico.", ln=True)
-            
-            nome_arquivo_pdf = f"Prontuario_{id_paciente}.pdf"
-            pdf.output(nome_arquivo_pdf)
-            
-            with open(nome_arquivo_pdf, "rb") as arquivo_pdf:
-                pdf_bytes = arquivo_pdf.read()
-            
-            st.download_button(
-                label="⬇️ Baixar Prontuário em PDF",
-                data=pdf_bytes,
-                file_name=nome_arquivo_pdf,
-                mime="application/pdf"
-            )
-
-    else:
-        st.warning("Nenhum paciente cadastrado na base de dados do Google Planilhas.")
+# Garantindo que a coluna de ID seja texto para não quebrar a busca
+if "Cns_Cpf (Id)" in df_pacientes.columns:
+    df_pacientes["Cns_Cpf (Id)"] = df_pacientes["Cns_Cpf (Id)"].fillna("S/N").astype(str)
 else:
-    st.info("Tentando conectar com a base de dados... Caso persista, recarregue a página.")
+    df_pacientes["Cns_Cpf (Id)"] = "S/N"
+
+# Corrigindo o erro KeyError: Agora busca pelo novo nome "Nome de Registro"
+if "Nome de Registro" in df_pacientes.columns:
+    df_pacientes["Busca"] = df_pacientes["Nome de Registro"].astype(str) + " - ID: " + df_pacientes["Cns_Cpf (Id)"]
+else:
+    st.error("A coluna 'Nome de Registro' não foi encontrada na Planilha Google. Verifique os cabeçalhos!")
+    st.stop()
+
+# ==========================================
+# 3. INTERFACE LATERAL (FILTROS)
+# ==========================================
+st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg/1200px-Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg.png", width=150)
+st.sidebar.title("Filtros Gerenciais")
+
+# Filtro inteligente de unidades (pega só as que têm pacientes)
+if "Unidade de Saúde" in df_pacientes.columns:
+    unidades_disponiveis = ["Todas"] + sorted(df_pacientes["Unidade de Saúde"].dropna().unique().tolist())
+    unidade_selecionada = st.sidebar.selectbox("Filtrar por Unidade de Saúde", unidades_disponiveis)
+
+    if unidade_selecionada != "Todas":
+        df_pacientes = df_pacientes[df_pacientes["Unidade de Saúde"] == unidade_selecionada]
+
+# ==========================================
+# 4. CARTÕES DE INDICADORES (KPIs)
+# ==========================================
+st.title("🩺 Painel Gerencial - ILTB Nova Iguaçu")
+
+# Prevenindo erros caso a coluna "Situação Atual" falte
+if "Situação Atual" not in df_pacientes.columns:
+    df_pacientes["Situação Atual"] = "Sem informação"
+
+total_pacientes = len(df_pacientes)
+em_andamento = len(df_pacientes[df_pacientes["Situação Atual"] == "Em andamento"])
+interrupcoes = len(df_pacientes[df_pacientes["Situação Atual"] == "Interrupção"])
+altas = len(df_pacientes[df_pacientes["Situação Atual"] == "Tratamento completo"])
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total de Notificações", total_pacientes)
+col2.metric("Tratamentos em Andamento", em_andamento)
+col3.metric("Interrupções (Alerta)", interrupcoes, delta_color="inverse")
+col4.metric("Tratamentos Completos", altas)
+
+st.markdown("---")
+
+# ==========================================
+# 5. ABAS PRINCIPAIS (PRONTUÁRIO E GRÁFICOS)
+# ==========================================
+aba1, aba2 = st.tabs(["👤 Visão do Paciente (Prontuário)", "📊 Gráficos Epidemiológicos"])
+
+# ------------------------------------------
+# ABA 1: VISÃO DO PACIENTE (PRONTUÁRIO)
+# ------------------------------------------
+with aba1:
+    st.subheader("Busca Rápida de Pacientes")
+    paciente_selecionado = st.selectbox("Digite o Nome, CNS ou CPF do paciente:", ["Selecione um paciente..."] + df_pacientes["Busca"].tolist())
+    
+    if paciente_selecionado != "Selecione um paciente...":
+        # Extraindo os dados do paciente selecionado
+        dados_paciente = df_pacientes[df_pacientes["Busca"] == paciente_selecionado].iloc[0]
+        paciente_id = dados_paciente["Cns_Cpf (Id)"]
+        
+        # Cabeçalho do Prontuário
+        st.markdown(f"### {dados_paciente.get('Nome de Registro', 'Nome não informado')}")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.write(f"**Data de Nasc:** {dados_paciente.get('Nascimento', '-')}")
+        c2.write(f"**Idade:** {dados_paciente.get('Idade', '-')}")
+        c3.write(f"**Sexo:** {dados_paciente.get('Sexo', '-')}")
+        c4.write(f"**Telefone:** {dados_paciente.get('Telefone', '-')}")
+        
+        st.write(f"**Unidade de Acompanhamento:** {dados_paciente.get('Unidade de Saúde', '-')}")
+        
+        # Bloco de Tratamento
+        st.info(f"**ESQUEMA E POSOLOGIA:** {dados_paciente.get('Medicamento', '-')} | {dados_paciente.get('Posologia', '-')}")
+        
+        c_t1, c_t2, c_t3 = st.columns(3)
+        c_t1.write(f"**Início TPT:** {dados_paciente.get('Data Início TPT', '-')}")
+        c_t2.write(f"**Término Previsto:** {dados_paciente.get('Término Previsto', '-')}")
+        
+        # Cor de destaque para a situação
+        sit = dados_paciente.get('Situação Atual', '-')
+        cor_sit = "green" if sit == "Tratamento completo" else "red" if sit == "Interrupção" else "orange"
+        c_t3.markdown(f"**Situação Atual:** <span style='color:{cor_sit}; font-weight:bold;'>{sit}</span>", unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Histórico de Evoluções
+        st.subheader("📋 Histórico de Evoluções e Curva de Peso")
+        
+        if not df_evolucoes.empty and "Cns_Cpf (Id)" in df_evolucoes.columns:
+            # Filtra evoluções pelo ID exato do paciente, convertendo ambos para string para garantir o match
+            df_evolucoes["Cns_Cpf (Id)"] = df_evolucoes["Cns_Cpf (Id)"].astype(str)
+            evos_paciente = df_evolucoes[df_evolucoes["Cns_Cpf (Id)"] == str(paciente_id)]
+            
+            if not evos_paciente.empty:
+                # Tenta puxar as colunas exatas da aba de evoluções
+                colunas_mostrar = []
+                for col in ["Data Da Consulta", "Peso Corporal (kg)", "Nova Situação", "Relato Clínico", "Conduta", "Próxima Consulta"]:
+                    if col in evos_paciente.columns:
+                        colunas_mostrar.append(col)
+                
+                if colunas_mostrar:
+                    # Inverte a ordem para a mais recente ficar no topo
+                    st.dataframe(evos_paciente[colunas_mostrar].iloc[::-1], use_container_width=True, hide_index=True)
+                else:
+                    st.dataframe(evos_paciente, use_container_width=True, hide_index=True)
+            else:
+                st.write("Nenhuma evolução registrada para este paciente.")
+        else:
+            st.write("Aba de evoluções ainda não sincronizada.")
+
+# ------------------------------------------
+# ABA 2: GRÁFICOS GERENCIAIS
+# ------------------------------------------
+with aba2:
+    st.subheader("Visão Epidemiológica")
+    
+    g1, g2 = st.columns(2)
+    
+    with g1:
+        # Gráfico de Situação
+        contagem_sit = df_pacientes["Situação Atual"].value_counts().reset_index()
+        contagem_sit.columns = ["Situação", "Quantidade"]
+        fig_sit = px.pie(contagem_sit, names="Situação", values="Quantidade", title="Distribuição por Status de Tratamento", hole=0.4)
+        st.plotly_chart(fig_sit, use_container_width=True)
+        
+    with g2:
+        # Gráfico por Esquema Medicamentoso
+        if "Medicamento" in df_pacientes.columns:
+            contagem_med = df_pacientes["Medicamento"].value_counts().reset_index()
+            contagem_med.columns = ["Esquema", "Quantidade"]
+            fig_med = px.bar(contagem_med, x="Esquema", y="Quantidade", title="Tratamentos por Esquema (Medicamento)", text="Quantidade", color="Esquema")
+            st.plotly_chart(fig_med, use_container_width=True)
+        else:
+            st.info("Coluna de 'Medicamento' não encontrada para gerar o gráfico.")
+        
+    st.markdown("---")
+    
+    # Gráfico de Unidades de Saúde
+    if "Unidade de Saúde" in df_pacientes.columns:
+        st.write("**Volume de Pacientes por Unidade de Saúde**")
+        contagem_uni = df_pacientes["Unidade de Saúde"].value_counts().reset_index()
+        contagem_uni.columns = ["Unidade", "Quantidade"]
+        fig_uni = px.bar(contagem_uni, y="Unidade", x="Quantidade", orientation='h', title="Pacientes Ativos por Unidade", text="Quantidade")
+        fig_uni.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_uni, use_container_width=True)
