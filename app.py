@@ -4,7 +4,7 @@ import requests
 import plotly.express as px
 
 # ==========================================
-# CONFIGURAÇÃO DA PÁGINA (Sempre a 1ª linha)
+# CONFIGURAÇÃO DA PÁGINA
 # ==========================================
 st.set_page_config(page_title="Gestão ILTB - Nova Iguaçu", page_icon="🩺", layout="wide")
 
@@ -28,26 +28,22 @@ def verificar_login():
                 submit = st.form_submit_button("Entrar no Sistema")
                 
                 if submit:
-                    # ⚠️ COLOQUE A SUA SENHA REAL AQUI EMBAIXO
                     if usuario == "heraldo_admin" and senha == "admin-123456": 
                         st.session_state["autenticado"] = True
-                        st.rerun() # Atualiza a tela para sumir o login e abrir o painel
+                        st.rerun() 
                     else:
                         st.error("❌ Usuário ou senha incorretos. Tente novamente.")
         
-        # O comando abaixo impede que o resto do código rode se não estiver logado
         st.stop() 
 
-# Chama a tranca do sistema!
 verificar_login()
 
 # ==========================================
 # 1. CONEXÃO COM O BANCO DE DADOS (GOOGLE)
 # ==========================================
-# ⚠️ ATENÇÃO: Cole a sua URL real do Google Apps Script (terminada em /exec) abaixo:
 API_URL = "https://script.google.com/macros/s/AKfycbyTyHorAMicNY7lNO6cVWG-pyAe03pTR8obS3NGOGDlZxXY-eS5Jt2O9Y4gzxtGW-a3rg/exec"
 
-@st.cache_data(ttl=60) # Atualiza os dados a cada 60 segundos
+@st.cache_data(ttl=60)
 def carregar_dados():
     try: 
         response = requests.get(f"{API_URL}?read=true", allow_redirects=True)
@@ -68,7 +64,6 @@ def carregar_dados():
         st.error(f"Falha na conexão: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-# Carregando os dados da nuvem
 df_pacientes, df_evolucoes = carregar_dados()
 
 # ==========================================
@@ -78,7 +73,6 @@ if df_pacientes.empty:
     st.warning("Nenhum paciente cadastrado ou aguardando sincronização com o banco de dados.")
     st.stop()
 
-# Detectar automaticamente o nome da coluna de ID (seja com ou sem "(Id)")
 coluna_id = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_pacientes.columns else "Cns_Cpf" if "Cns_Cpf" in df_pacientes.columns else None
 
 if coluna_id:
@@ -87,7 +81,6 @@ else:
     df_pacientes["Cns_Cpf_Temp"] = "S/N"
     coluna_id = "Cns_Cpf_Temp"
 
-# Buscar a coluna do Nome do Paciente
 coluna_nome = "Nome de Registro" if "Nome de Registro" in df_pacientes.columns else "Nome Do Paciente" if "Nome Do Paciente" in df_pacientes.columns else None
 
 if coluna_nome:
@@ -102,7 +95,6 @@ else:
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg/1200px-Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg.png", width=150)
 st.sidebar.title("Bem-vindo, Administrador!")
 
-# Botão de Sair (Logout)
 if st.sidebar.button("🚪 Sair do Sistema"):
     st.session_state["autenticado"] = False
     st.rerun()
@@ -143,9 +135,6 @@ st.markdown("---")
 # ==========================================
 aba1, aba2 = st.tabs(["👤 Visão do Paciente (Prontuário)", "📊 Gráficos Epidemiológicos"])
 
-# ------------------------------------------
-# ABA 1: VISÃO DO PACIENTE (PRONTUÁRIO)
-# ------------------------------------------
 with aba1:
     st.subheader("Busca Rápida de Pacientes")
     paciente_selecionado = st.selectbox("Digite o Nome, CNS ou CPF do paciente:", ["Selecione um paciente..."] + df_pacientes["Busca"].tolist())
@@ -192,9 +181,9 @@ with aba1:
                             colunas_mostrar.append(col)
                     
                     if colunas_mostrar:
-                        st.dataframe(evos_paciente[colunas_mostrar].iloc[::-1], use_container_width=True, hide_index=True)
+                        st.dataframe(evos_paciente[colunas_mostrar].iloc[::-1], hide_index=True)
                     else:
-                        st.dataframe(evos_paciente, use_container_width=True, hide_index=True)
+                        st.dataframe(evos_paciente, hide_index=True)
                 else:
                     st.write("Nenhuma evolução registrada para este paciente.")
             else:
@@ -202,9 +191,6 @@ with aba1:
         else:
             st.write("Aba de evoluções ainda não sincronizada.")
 
-# ------------------------------------------
-# ABA 2: GRÁFICOS GERENCIAIS
-# ------------------------------------------
 with aba2:
     st.subheader("Visão Epidemiológica")
     
@@ -214,14 +200,14 @@ with aba2:
         contagem_sit = df_pacientes["Situação Atual"].value_counts().reset_index()
         contagem_sit.columns = ["Situação", "Quantidade"]
         fig_sit = px.pie(contagem_sit, names="Situação", values="Quantidade", title="Distribuição por Status de Tratamento", hole=0.4)
-        st.plotly_chart(fig_sit, use_container_width=True)
+        st.plotly_chart(fig_sit)
         
     with g2:
         if "Medicamento" in df_pacientes.columns:
             contagem_med = df_pacientes["Medicamento"].value_counts().reset_index()
             contagem_med.columns = ["Esquema", "Quantidade"]
             fig_med = px.bar(contagem_med, x="Esquema", y="Quantidade", title="Tratamentos por Esquema", text="Quantidade", color="Esquema")
-            st.plotly_chart(fig_med, use_container_width=True)
+            st.plotly_chart(fig_med)
         else:
             st.info("Coluna de 'Medicamento' não encontrada para gerar o gráfico.")
         
@@ -233,4 +219,4 @@ with aba2:
         contagem_uni.columns = ["Unidade", "Quantidade"]
         fig_uni = px.bar(contagem_uni, y="Unidade", x="Quantidade", orientation='h', title="Pacientes Ativos por Unidade", text="Quantidade")
         fig_uni.update_layout(yaxis={'categoryorder':'total ascending'})
-        st.plotly_chart(fig_uni, use_container_width=True)
+        st.plotly_chart(fig_uni)
