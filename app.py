@@ -16,7 +16,7 @@ API_URL = "https://script.google.com/macros/s/AKfycbyTyHorAMicNY7lNO6cVWG-pyAe03
 
 @st.cache_data(ttl=60) # Atualiza os dados a cada 60 segundos
 def carregar_dados():
-    try:
+    try: 
         response = requests.get(f"{API_URL}?read=true")
         if response.status_code == 200:
             dados = response.json()
