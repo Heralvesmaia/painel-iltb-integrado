@@ -29,7 +29,7 @@ def verificar_login():
                 
                 if submit:
                     # ⚠️ COLOQUE A SUA SENHA REAL AQUI EMBAIXO
-                    if usuario == "heraldo_admin" and senha == "123456": 
+                    if usuario == "heraldo_admin" and senha == "admin-123456": 
                         st.session_state["autenticado"] = True
                         st.rerun() # Atualiza a tela para sumir o login e abrir o painel
                     else:
