@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
+from fpdf import FPDF
 
 # ==========================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -28,15 +29,66 @@ def verificar_login():
                 submit = st.form_submit_button("Entrar no Sistema")
                 
                 if submit:
-                    if usuario == "heraldo-admin" and senha == "admin-123456": 
+                    if usuario == "heraldo_admin" and senha == "admin-123456": 
                         st.session_state["autenticado"] = True
                         st.rerun() 
                     else:
                         st.error("❌ Usuário ou senha incorretos. Tente novamente.")
-        
         st.stop() 
 
 verificar_login()
+
+# ==========================================
+# FUNÇÃO GERADORA DE PDF (PRONTUÁRIO)
+# ==========================================
+def gerar_pdf_prontuario(paciente, evolucoes):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Função para evitar erro com acentuação no PDF
+    def formatar_texto(texto):
+        return str(texto).encode('latin-1', 'replace').decode('latin-1')
+
+    # Cabeçalho do PDF
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, formatar_texto('SIG-ILTB NOVA IGUAÇU - PRONTUÁRIO LONGITUDINAL'), 0, 1, 'C')
+    pdf.ln(5)
+
+    # Dados do Paciente
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, formatar_texto(f"PACIENTE: {paciente.get('Nome de Registro', 'Não informado')}"), 0, 1)
+    
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 6, formatar_texto(f"ID (CNS/CPF): {paciente.get('Cns_Cpf (Id)', '-')}    Idade: {paciente.get('Idade', '-')}    Sexo: {paciente.get('Sexo', '-')}"), 0, 1)
+    pdf.cell(0, 6, formatar_texto(f"Unidade de Acompanhamento: {paciente.get('Unidade de Saúde', '-')}"), 0, 1)
+    pdf.cell(0, 6, formatar_texto(f"Data de Início TPT: {paciente.get('Data Início TPT', '-')}    Término Previsto: {paciente.get('Término Previsto', '-')}"), 0, 1)
+    pdf.cell(0, 6, formatar_texto(f"Esquema: {paciente.get('Medicamento', '-')} - {paciente.get('Posologia', '-')}"), 0, 1)
+    pdf.cell(0, 6, formatar_texto(f"Situação Atual: {paciente.get('Situação Atual', '-')}"), 0, 1)
+    
+    pdf.line(10, pdf.get_y() + 2, 200, pdf.get_y() + 2)
+    pdf.ln(8)
+
+    # Evoluções
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, formatar_texto("HISTÓRICO DE EVOLUÇÕES CLÍNICAS"), 0, 1)
+    
+    if evolucoes.empty:
+        pdf.set_font("Arial", 'I', 10)
+        pdf.cell(0, 8, formatar_texto("Nenhuma evolução registrada para este paciente até o momento."), 0, 1)
+    else:
+        for idx, evo in evolucoes.iterrows():
+            pdf.set_font("Arial", 'B', 10)
+            pdf.cell(0, 6, formatar_texto(f"Data: {evo.get('Data Da Consulta', '-')} | Situação: {evo.get('Nova Situação', '-')} | Peso: {evo.get('Peso Corporal (kg)', '-')} kg"), 0, 1)
+            
+            pdf.set_font("Arial", '', 10)
+            pdf.multi_cell(0, 6, formatar_texto(f"Relato Clínico: {evo.get('Relato Clínico', '-')}"))
+            pdf.multi_cell(0, 6, formatar_texto(f"Conduta: {evo.get('Conduta', '-')}"))
+            pdf.cell(0, 6, formatar_texto(f"Próxima Consulta Agendada: {evo.get('Próxima Consulta', '-')}"), 0, 1)
+            pdf.ln(3)
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(3)
+
+    return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
 # 1. CONEXÃO COM O BANCO DE DADOS (GOOGLE)
@@ -51,17 +103,15 @@ def carregar_dados():
             try:
                 dados = response.json()
             except ValueError:
-                st.error("🚨 BLOQUEIO DO GOOGLE: A URL retornou uma página de login. Vá no Google Script, clique em Nova Implantação e defina 'Quem tem acesso' como 'Qualquer pessoa'.")
+                st.error("🚨 BLOQUEIO DO GOOGLE: A URL retornou uma página de login.")
                 return pd.DataFrame(), pd.DataFrame()
                 
             df_pacientes = pd.DataFrame(dados.get("pacientes", []))
             df_evolucoes = pd.DataFrame(dados.get("evolucoes", []))
             return df_pacientes, df_evolucoes
         else:
-            st.error(f"Erro ao conectar com o Google Sheets: Status {response.status_code}")
             return pd.DataFrame(), pd.DataFrame()
     except Exception as e:
-        st.error(f"Falha na conexão: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
 df_pacientes, df_evolucoes = carregar_dados()
@@ -71,6 +121,11 @@ df_pacientes, df_evolucoes = carregar_dados()
 # ==========================================
 if df_pacientes.empty:
     st.warning("Nenhum paciente cadastrado ou aguardando sincronização com o banco de dados.")
+    
+    # Botão de atualizar caso esteja vazio
+    if st.button("🔄 Sincronizar Agora"):
+        st.cache_data.clear()
+        st.rerun()
     st.stop()
 
 coluna_id = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_pacientes.columns else "Cns_Cpf" if "Cns_Cpf" in df_pacientes.columns else None
@@ -86,7 +141,7 @@ coluna_nome = "Nome de Registro" if "Nome de Registro" in df_pacientes.columns e
 if coluna_nome:
     df_pacientes["Busca"] = df_pacientes[coluna_nome].astype(str) + " - ID: " + df_pacientes[coluna_id]
 else:
-    st.error("A coluna 'Nome de Registro' não foi encontrada na Planilha Google. Verifique os cabeçalhos!")
+    st.error("A coluna de Nome não foi encontrada na Planilha Google.")
     st.stop()
 
 # ==========================================
@@ -95,8 +150,9 @@ else:
 st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg/1200px-Bras%C3%A3o_de_Nova_Igua%C3%A7u.svg.png", width=150)
 st.sidebar.title("Bem-vindo, Administrador!")
 
-if st.sidebar.button("🚪 Sair do Sistema"):
-    st.session_state["autenticado"] = False
+# BOTÃO DE ATUALIZAR MANUALMENTE
+if st.sidebar.button("🔄 Sincronizar Agora", type="primary"):
+    st.cache_data.clear()
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -108,6 +164,11 @@ if "Unidade de Saúde" in df_pacientes.columns:
 
     if unidade_selecionada != "Todas":
         df_pacientes = df_pacientes[df_pacientes["Unidade de Saúde"] == unidade_selecionada]
+
+st.sidebar.markdown("---")
+if st.sidebar.button("🚪 Sair do Sistema"):
+    st.session_state["autenticado"] = False
+    st.rerun()
 
 # ==========================================
 # 4. CARTÕES DE INDICADORES (KPIs)
@@ -152,7 +213,6 @@ with aba1:
         c4.write(f"**Telefone:** {dados_paciente.get('Telefone', '-')}")
         
         st.write(f"**Unidade de Acompanhamento:** {dados_paciente.get('Unidade de Saúde', '-')}")
-        
         st.info(f"**ESQUEMA E POSOLOGIA:** {dados_paciente.get('Medicamento', '-')} | {dados_paciente.get('Posologia', '-')}")
         
         c_t1, c_t2, c_t3 = st.columns(3)
@@ -165,7 +225,11 @@ with aba1:
         
         st.markdown("---")
         
-        st.subheader("📋 Histórico de Evoluções e Curva de Peso")
+        # --- BLOCO DE EVOLUÇÕES E PDF ---
+        col_evo1, col_evo2 = st.columns([3, 1])
+        col_evo1.subheader("📋 Histórico de Evoluções")
+        
+        evos_paciente = pd.DataFrame()
         
         if not df_evolucoes.empty:
             col_id_evo = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_evolucoes.columns else "Cns_Cpf" if "Cns_Cpf" in df_evolucoes.columns else None
@@ -175,21 +239,32 @@ with aba1:
                 evos_paciente = df_evolucoes[df_evolucoes[col_id_evo] == str(paciente_id)]
                 
                 if not evos_paciente.empty:
-                    colunas_mostrar = []
-                    for col in ["Data Da Consulta", "Peso Corporal (kg)", "Nova Situação", "Relato Clínico", "Conduta", "Próxima Consulta"]:
-                        if col in evos_paciente.columns:
-                            colunas_mostrar.append(col)
+                    # Inverte para mostrar as mais recentes primeiro
+                    evos_paciente = evos_paciente.iloc[::-1]
+                    colunas_mostrar = [col for col in ["Data Da Consulta", "Peso Corporal (kg)", "Nova Situação", "Relato Clínico", "Conduta", "Próxima Consulta"] if col in evos_paciente.columns]
                     
                     if colunas_mostrar:
-                        st.dataframe(evos_paciente[colunas_mostrar].iloc[::-1], hide_index=True)
+                        st.dataframe(evos_paciente[colunas_mostrar], hide_index=True)
                     else:
                         st.dataframe(evos_paciente, hide_index=True)
                 else:
                     st.write("Nenhuma evolução registrada para este paciente.")
-            else:
-                st.write("Erro: Coluna de ID não encontrada na aba de evoluções.")
         else:
             st.write("Aba de evoluções ainda não sincronizada.")
+            
+        # BOTÃO GERAR PDF
+        with col_evo2:
+            pdf_bytes = gerar_pdf_prontuario(dados_paciente, evos_paciente)
+            nome_arquivo = f"Prontuario_{str(paciente_id).replace('.', '').replace('-', '')}.pdf"
+            
+            st.download_button(
+                label="📄 Baixar PDF do Prontuário",
+                data=pdf_bytes,
+                file_name=nome_arquivo,
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True
+            )
 
 with aba2:
     st.subheader("Visão Epidemiológica")
@@ -208,8 +283,6 @@ with aba2:
             contagem_med.columns = ["Esquema", "Quantidade"]
             fig_med = px.bar(contagem_med, x="Esquema", y="Quantidade", title="Tratamentos por Esquema", text="Quantidade", color="Esquema")
             st.plotly_chart(fig_med)
-        else:
-            st.info("Coluna de 'Medicamento' não encontrada para gerar o gráfico.")
         
     st.markdown("---")
     
