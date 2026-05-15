@@ -53,7 +53,7 @@ def gerar_pdf_prontuario(paciente, evolucoes, situacao_real):
     pdf.ln(5)
 
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(w=190, h=8, txt=formatar_texto(f"PACIENTE: {paciente.get('Nome de Registro', 'Não informado')}"), border=0, ln=1)
+    pdf.cell(w=190, h=8, txt=formatar_texto(f"PACIENTE: {paciente.get('Nome de Registro', paciente.get('Nome Do Paciente', 'Não informado'))}"), border=0, ln=1)
     
     pdf.set_font("Arial", '', 10)
     pdf.cell(w=190, h=6, txt=formatar_texto(f"ID: {paciente.get('Cns_Cpf (Id)', paciente.get('Cns_Cpf', '-'))} | Idade: {paciente.get('Idade', '-')}"), border=0, ln=1)
@@ -71,10 +71,16 @@ def gerar_pdf_prontuario(paciente, evolucoes, situacao_real):
     else:
         for idx, evo in evolucoes.iterrows():
             pdf.set_font("Arial", 'B', 10)
-            pdf.cell(w=190, h=6, txt=formatar_texto(f"Data: {evo.get('Data Da Consulta', '-')} | Status: {evo.get('Nova Situação', '-')}"), border=0, ln=1)
+            
+            # Busca os nomes exatos ou usa fallback para não quebrar
+            data_evo = evo.get('Data Da Consulta', evo.get(evolucoes.columns[2], '-')) if len(evolucoes.columns) > 2 else '-'
+            sit_evo = evo.get('Nova Situação', evo.get(evolucoes.columns[8], '-')) if len(evolucoes.columns) > 8 else '-'
+            conduta_evo = evo.get('Conduta', evo.get(evolucoes.columns[7], '-')) if len(evolucoes.columns) > 7 else '-'
+            
+            pdf.cell(w=190, h=6, txt=formatar_texto(f"Data: {data_evo} | Status: {sit_evo}"), border=0, ln=1)
             pdf.set_font("Arial", '', 10)
             pdf.set_x(10)
-            pdf.multi_cell(w=190, h=6, txt=formatar_texto(f"Conduta: {evo.get('Conduta', '-')}"))
+            pdf.multi_cell(w=190, h=6, txt=formatar_texto(f"Conduta: {conduta_evo}"))
             pdf.ln(2)
 
     try:
@@ -104,22 +110,27 @@ df_pacientes, df_evolucoes = carregar_dados()
 # 2. PADRONIZAÇÃO E SINCRONIZAÇÃO DE STATUS
 # ==========================================
 def obter_situacao_real(paciente_id, situacao_cadastro):
-    # Normaliza o status do cadastro (Tratamento completo -> Tratamento Completo)
     situacao_cadastro = str(situacao_cadastro).replace("completo", "Completo")
     
-    if not df_evolucoes.empty:
-        col_id_evo = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_evolucoes.columns else "Cns_Cpf"
+    if not df_evolucoes.empty and len(df_evolucoes.columns) > 1:
+        # Pega a coluna 2 como ID automaticamente, não importa o nome que esteja na planilha
+        col_id_evo = df_evolucoes.columns[1] 
+        
         evos = df_evolucoes[df_evolucoes[col_id_evo].astype(str) == str(paciente_id)]
         if not evos.empty:
-            # Pega o status da evolução mais recente (última linha salva no Google)
-            ultima_situacao = evos.iloc[-1].get("Nova Situação", situacao_cadastro)
-            return str(ultima_situacao).replace("completo", "Completo")
+            # Tenta achar a coluna "Nova Situação", senão pega a coluna 9 automaticamente
+            col_sit_evo = "Nova Situação" if "Nova Situação" in df_evolucoes.columns else df_evolucoes.columns[8] if len(df_evolucoes.columns) > 8 else None
+            
+            if col_sit_evo:
+                ultima_situacao = evos.iloc[-1].get(col_sit_evo, situacao_cadastro)
+                return str(ultima_situacao).replace("completo", "Completo")
             
     return situacao_cadastro
 
 if not df_pacientes.empty:
-    col_id_pac = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_pacientes.columns else "Cns_Cpf"
-    # Atualiza a coluna de Situação para ser dinâmica baseada na evolução
+    # Descobre o nome da coluna de ID na aba Pacientes
+    col_id_pac = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_pacientes.columns else "Cns_Cpf" if "Cns_Cpf" in df_pacientes.columns else df_pacientes.columns[1]
+    
     df_pacientes["Situação Atual"] = df_pacientes.apply(
         lambda row: obter_situacao_real(row[col_id_pac], row.get("Situação Atual", "Em andamento")), axis=1
     )
@@ -138,7 +149,6 @@ if not df_pacientes.empty:
     total = len(df_pacientes)
     em_andamento = len(df_pacientes[df_pacientes["Situação Atual"] == "Em andamento"])
     interrupcoes = len(df_pacientes[df_pacientes["Situação Atual"] == "Interrupção"])
-    # Conta tanto "Tratamento completo" quanto "Tratamento Completo"
     concluidos = len(df_pacientes[df_pacientes["Situação Atual"] == "Tratamento Completo"])
 
     c1, c2, c3, c4 = st.columns(4)
@@ -150,8 +160,9 @@ if not df_pacientes.empty:
     aba1, aba2 = st.tabs(["👤 Prontuário", "📊 Epidemiologia"])
 
     with aba1:
-        col_id = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_pacientes.columns else "Cns_Cpf"
-        col_nome = "Nome de Registro" if "Nome de Registro" in df_pacientes.columns else "Nome Do Paciente"
+        col_id = "Cns_Cpf (Id)" if "Cns_Cpf (Id)" in df_pacientes.columns else "Cns_Cpf" if "Cns_Cpf" in df_pacientes.columns else df_pacientes.columns[1]
+        col_nome = "Nome de Registro" if "Nome de Registro" in df_pacientes.columns else "Nome Do Paciente" if "Nome Do Paciente" in df_pacientes.columns else df_pacientes.columns[4]
+        
         df_pacientes["Busca"] = df_pacientes[col_nome].astype(str) + " - ID: " + df_pacientes[col_id].astype(str)
         
         escolha = st.selectbox("Buscar Paciente:", ["Selecione..."] + df_pacientes["Busca"].tolist())
@@ -164,10 +175,17 @@ if not df_pacientes.empty:
             st.subheader(f"Paciente: {dados[col_nome]}")
             st.markdown(f"### Status Atual: **{sit_real}**")
             
-            evos_p = df_evolucoes[df_evolucoes[col_id].astype(str) == str(id_pac)].iloc[::-1] if not df_evolucoes.empty else pd.DataFrame()
+            # Tabela de Evoluções - Blindada
+            evos_p = pd.DataFrame()
+            if not df_evolucoes.empty and len(df_evolucoes.columns) > 1:
+                col_id_evo = df_evolucoes.columns[1] # A coluna de ID é sempre a 2ª na aba EVOLUCOES
+                evos_p = df_evolucoes[df_evolucoes[col_id_evo].astype(str) == str(id_pac)].iloc[::-1]
             
             col_e1, col_e2 = st.columns([3, 1])
-            col_e1.dataframe(evos_p, hide_index=True)
+            if not evos_p.empty:
+                col_e1.dataframe(evos_p, hide_index=True)
+            else:
+                col_e1.info("Nenhuma evolução registrada no sistema até o momento.")
             
             with col_e2:
                 pdf_b = gerar_pdf_prontuario(dados, evos_p, sit_real)
