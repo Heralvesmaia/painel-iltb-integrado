@@ -29,7 +29,7 @@ def verificar_login():
                 submit = st.form_submit_button("Entrar no Sistema")
                 
                 if submit:
-                    if usuario == "heraldo_admin" and senha == "admin-123456": 
+                    if usuario == "Vasco_Barcelos" and senha == "vasco-123456": 
                         st.session_state["autenticado"] = True
                         st.rerun() 
                     else:
